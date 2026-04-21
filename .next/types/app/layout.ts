@@ -1,4 +1,4 @@
-// File: /root/test1/cg20_merge/app/layout.tsx
+// File: C:\Users\hi\Documents\GitHub\cg20\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

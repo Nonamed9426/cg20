@@ -178,7 +178,7 @@ export const games: Game[] = [
     news: [
       { title: '시즌 스쿼드 반영', date: '2026.04.10', text: '최신 리그 퍼포먼스를 반영한 로스터 업데이트가 적용되었습니다.' },
     ],
-  },,
+  },
   {
     slug: 'counter-strike-2',
     title: 'Counter-Strike 2',
