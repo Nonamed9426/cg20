@@ -45,7 +45,7 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
                 <div className="mt-2 text-sm text-white/70">{game.reviewLabel} · {game.score}점</div>
                 <div className="mt-4 flex gap-2">
                   <a href={getSteamStoreUrl(game.steamAppId)} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">지금 구매</a>
-                  <Link href={`/predict/${game.slug}`} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
+                  <Link href={`/predict/${game.steamAppId}`} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
                 </div>
                 <div className="mt-4 space-y-2 text-xs text-white/55">
                   <div>플랫폼: {game.platforms.join(', ')}</div>
@@ -126,7 +126,7 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
             <span className="text-xs text-white/50">태그 기반</span>
           </div>
           <div className="space-y-4">
-            {related.map((item) => <GameCard key={item.slug} game={item} compact />)}
+            {related.map((item) => <GameCard key={item.steamAppId} game={item} compact />)}
           </div>
         </section>
 
@@ -158,7 +158,7 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
         <section className="panel p-5">
           <div className="mb-4 section-title">바로가기</div>
           <div className="space-y-3 text-sm text-white/70">
-            <Link href={`/predict/${game.slug}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3">할인예측 페이지 <ExternalLink className="h-4 w-4" /></Link>
+            <Link href={`/predict/${game.steamAppId}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3">할인예측 페이지 <ExternalLink className="h-4 w-4" /></Link>
             <Link href="/rankings" className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3">게임 순위 페이지 <ExternalLink className="h-4 w-4" /></Link>
             <Link href="/recommend" className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3">추천 결과 페이지 <ExternalLink className="h-4 w-4" /></Link>
           </div>

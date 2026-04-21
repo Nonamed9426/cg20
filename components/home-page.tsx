@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Flame, Sparkles, Trophy } from 'lucide-react';
 import {
   Game,
   exchangeRates,
@@ -14,29 +13,6 @@ import {
 } from '@/lib/data';
 import { GameCard } from './game-card';
 
-function RankingRow({ index, game }: { index: number; game: Game }) {
-  return (
-    <Link
-      href={`/games/${game.slug}`}
-      className="grid grid-cols-[36px_92px_1fr_140px] items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3 transition hover:border-accent/70"
-    >
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6e35dc] text-sm font-bold">
-        {index}
-      </div>
-      <img src={getSteamHeader(game.steamAppId)} alt={game.title} className="h-12 w-full rounded-lg object-cover" />
-      <div>
-        <div className="text-sm font-semibold">{game.title}</div>
-        <div className="text-xs text-white/55">
-          {game.prices.kr} · {game.reviewLabel}
-        </div>
-      </div>
-      <div className="justify-self-end rounded-lg border border-white/10 bg-[#29134f] px-3 py-2 text-xs text-white/70">
-        상세 분석
-      </div>
-    </Link>
-  );
-}
-
 function SummaryColumn({ title, items }: { title: string; items: Game[] }) {
   return (
     <div className="rounded-[24px] border border-white/6 bg-[#21103d] p-4">
@@ -45,17 +21,17 @@ function SummaryColumn({ title, items }: { title: string; items: Game[] }) {
         {items.map((item, idx) => (
           <Link
             key={`${title}-${item.slug}`}
-            href={`/games/${item.slug}`}
+            href={`/games/${item.steamAppId}`}
             className="block rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition hover:border-accent/60"
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-semibold text-white">
                   {idx + 1}. {item.title}
                 </div>
                 <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/58">{item.summary}</div>
               </div>
-              <div className="text-lg font-semibold text-[#d9c2ff]">{item.score}</div>
+              <div className="flex-shrink-0 text-lg font-semibold text-[#d9c2ff]">{item.score}</div>
             </div>
           </Link>
         ))}
@@ -76,6 +52,8 @@ export function HomePage() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── 상단: 오늘의 추천 + 환율/빠른이동 ── */}
       <div className="grid gap-6 lg:grid-cols-[1.38fr_0.88fr]">
         <section className="panel overflow-hidden p-5 md:p-6">
           <div className="mb-3 flex items-center justify-between text-xs text-white/50">
@@ -90,15 +68,11 @@ export function HomePage() {
                 alt={game.title}
                 className="h-[260px] w-full rounded-[22px] object-cover shadow-neon"
               />
-
               <div className="mt-4 flex flex-wrap gap-2">
                 {game.tags.map((tag) => (
-                  <span key={tag} className="pill">
-                    {tag}
-                  </span>
+                  <span key={tag} className="pill">{tag}</span>
                 ))}
               </div>
-
               <div className="mt-4 panel-soft p-4">
                 <div className="mb-3 flex items-center gap-3 border-b border-white/8 pb-3 text-sm text-white/65">
                   <span className="text-white">게임 소개</span>
@@ -118,8 +92,13 @@ export function HomePage() {
                   <div className="text-sm text-white/70">{game.reviewLabel}</div>
                 </div>
 
-                <div className="mt-4 text-5xl font-black tracking-tight text-white">{game.title}</div>
-                <p className="mt-3 text-sm leading-7 text-white/74">{game.reason.join(', ')} 흐름을 종합해 추천한 오늘의 1픽입니다.</p>
+                {/* 반응형 폰트: 모바일 작게, 데스크탑 크게 */}
+                <div className="mt-4 text-2xl font-black tracking-tight text-white md:text-4xl lg:text-5xl">
+                  {game.title}
+                </div>
+                <p className="mt-3 text-sm leading-7 text-white/74">
+                  {game.reason.join(', ')} 흐름을 종합해 추천한 오늘의 1픽입니다.
+                </p>
 
                 <div className="mt-5 rounded-[20px] bg-white/[0.05] p-4">
                   <div className="text-sm text-white/50">현재 가격</div>
@@ -128,10 +107,10 @@ export function HomePage() {
                 </div>
 
                 <div className="mt-5 flex gap-3">
-                  <Link href={`/games/${game.slug}`} className="flex-1 rounded-xl bg-[#3fd09d] px-4 py-4 text-center text-lg font-bold text-[#120821]">
+                  <Link href={`/games/${game.steamAppId}`} className="flex-1 rounded-xl bg-[#3fd09d] px-4 py-4 text-center text-base font-bold text-[#120821] md:text-lg">
                     상세 보기
                   </Link>
-                  <Link href={`/predict/${game.slug}`} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center text-lg font-bold text-white">
+                  <Link href={`/predict/${game.steamAppId}`} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center text-base font-bold text-white md:text-lg">
                     할인 예측 보기
                   </Link>
                 </div>
@@ -147,26 +126,24 @@ export function HomePage() {
 
         <aside className="space-y-6">
           <section className="panel p-5">
-            <div className="text-2xl font-black text-white">오늘의 환율</div>
-            <div className="mt-2 text-base text-white/55">하나은행 매매기준율 예시 구조</div>
-
+            <div className="text-xl font-black text-white md:text-2xl">오늘의 환율</div>
+            <div className="mt-2 text-sm text-white/55 md:text-base">하나은행 매매기준율 예시 구조</div>
             <div className="mt-5 space-y-4">
               <div className="rounded-[20px] bg-white/[0.04] p-5">
                 <div className="text-sm text-white/55">USD → KRW</div>
-                <div className="mt-2 text-3xl font-black text-white">₩{exchangeRates.usdToKrw.toLocaleString()}</div>
+                <div className="mt-2 text-2xl font-black text-white md:text-3xl">₩{exchangeRates.usdToKrw.toLocaleString()}</div>
               </div>
               <div className="rounded-[20px] bg-white/[0.04] p-5">
                 <div className="text-sm text-white/55">JPY → KRW</div>
-                <div className="mt-2 text-3xl font-black text-white">₩{exchangeRates.jpyToKrw}</div>
+                <div className="mt-2 text-2xl font-black text-white md:text-3xl">₩{exchangeRates.jpyToKrw}</div>
               </div>
             </div>
-
             <div className="mt-4 text-sm text-white/45">업데이트 시각: {exchangeRates.updatedAt}</div>
           </section>
 
           <section className="panel p-5">
-            <div className="text-2xl font-black text-white">빠른 이동</div>
-            <div className="mt-2 text-base text-white/55">섹션별 Top Ranking 이동 버튼</div>
+            <div className="text-xl font-black text-white md:text-2xl">빠른 이동</div>
+            <div className="mt-2 text-sm text-white/55 md:text-base">섹션별 Top Ranking 이동 버튼</div>
             <div className="mt-5 space-y-3 text-sm">
               <Link href="/rankings?tab=streamerTop" className="block rounded-2xl bg-white/[0.05] px-5 py-4 font-semibold text-white/90 transition hover:bg-white/[0.09]">
                 스트리밍 인기 Top 100
@@ -185,12 +162,13 @@ export function HomePage() {
         </aside>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-        <section className="space-y-6">
+      {/* ── 중단: 게임 추천 섹션 + 국가별 구매 비교/할인 뉴스 ── */}
+      <div className="grid items-start gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+        <div className="space-y-6">
           <section>
             <div className="mb-4">
-              <div className="text-[36px] font-black tracking-tight text-white">지금 사도 되는 게임</div>
-              <div className="mt-1 text-lg text-white/58">할인율, 평점, 업데이트 흐름을 같이 반영한 추천</div>
+              <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">지금 사도 되는 게임</div>
+              <div className="mt-1 text-base text-white/58">할인율, 평점, 업데이트 흐름을 같이 반영한 추천</div>
             </div>
             <div className="grid gap-4 md:grid-cols-4">
               {buyNow.map((item) => (
@@ -201,8 +179,8 @@ export function HomePage() {
 
           <section>
             <div className="mb-4">
-              <div className="text-[36px] font-black tracking-tight text-white">조금 더 기다려야 하는 게임</div>
-              <div className="mt-1 text-lg text-white/58">다음 할인 이벤트를 기다리면 더 유리한 후보</div>
+              <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">조금 더 기다려야 하는 게임</div>
+              <div className="mt-1 text-base text-white/58">다음 할인 이벤트를 기다리면 더 유리한 후보</div>
             </div>
             <div className="grid gap-4 md:grid-cols-4">
               {buyLater.map((item) => (
@@ -213,8 +191,8 @@ export function HomePage() {
 
           <section>
             <div className="mb-4">
-              <div className="text-[36px] font-black tracking-tight text-white">비슷한 게임 추천</div>
-              <div className="mt-1 text-lg text-white/58">오늘의 추천 게임을 좋아하면 이어서 볼만한 게임</div>
+              <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">비슷한 게임 추천</div>
+              <div className="mt-1 text-base text-white/58">오늘의 추천 게임을 좋아하면 이어서 볼만한 게임</div>
             </div>
             <div className="grid gap-4 md:grid-cols-4">
               {similar.map((item) => (
@@ -222,51 +200,58 @@ export function HomePage() {
               ))}
             </div>
           </section>
-        </section>
+        </div>
 
-        <aside className="space-y-6">
+        {/* aside도 items-start로 맞춰서 빈칸 방지 */}
+        <aside className="space-y-6 lg:sticky lg:top-6">
           <section className="panel p-5">
             <div className="text-sm font-semibold text-[#f0b5ff]">환율 비교 추천</div>
-            <div className="mt-1 text-[36px] font-black tracking-tight text-white">국가별 구매 비교</div>
+            <div className="mt-1 text-2xl font-black tracking-tight text-white md:text-[36px]">국가별 구매 비교</div>
             <div className="mt-2 text-sm text-white/45">기준: {exchangeRates.updatedAt}</div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <div className="rounded-[20px] bg-white/[0.04] p-5">
+              <div className="rounded-[20px] bg-white/[0.04] p-4">
                 <div className="text-sm text-white/55">한국</div>
-                <div className="mt-3 text-2xl font-black text-white">₩{krwBase.toLocaleString()}</div>
-                <div className="mt-2 text-sm text-white/45">기본 비교 기준</div>
+                <div className="mt-3 text-xl font-black text-white md:text-2xl">₩{krwBase.toLocaleString()}</div>
+                <div className="mt-2 text-xs text-white/45">기본 비교 기준</div>
               </div>
-              <div className="rounded-[20px] bg-white/[0.04] p-5">
+              <div className="rounded-[20px] bg-white/[0.04] p-4">
                 <div className="text-sm text-white/55">미국</div>
-                <div className="mt-3 text-2xl font-black text-white">{game.prices.us}</div>
-                <div className="mt-2 text-sm text-white/45">원화 환산 약 ₩{usKrw.toLocaleString()}</div>
+                <div className="mt-3 text-xl font-black text-white md:text-2xl">{game.prices.us}</div>
+                <div className="mt-2 text-xs text-white/45">약 ₩{usKrw.toLocaleString()}</div>
               </div>
-              <div className="rounded-[20px] bg-white/[0.04] p-5">
+              <div className="rounded-[20px] bg-white/[0.04] p-4">
                 <div className="text-sm text-white/55">일본</div>
-                <div className="mt-3 text-2xl font-black text-white">{game.prices.jp}</div>
-                <div className="mt-2 text-sm text-white/45">원화 환산 약 ₩{jpKrw.toLocaleString()}</div>
+                <div className="mt-3 text-xl font-black text-white md:text-2xl">{game.prices.jp}</div>
+                <div className="mt-2 text-xs text-white/45">약 ₩{jpKrw.toLocaleString()}</div>
               </div>
             </div>
 
             <div className="mt-5 rounded-[18px] border border-[#59d6b9]/25 bg-[#12333f] px-4 py-4 text-sm leading-7 text-[#d7fff3]">
-              분석: 현재 한국가는 ₩{krwBase.toLocaleString()}이고, 미국 환산가는 약 ₩{usKrw.toLocaleString()}, 일본 환산가는 약 ₩{jpKrw.toLocaleString()}입니다.
-              지금 기준으로는 {Math.min(krwBase, usKrw, jpKrw) === jpKrw ? '일본' : Math.min(krwBase, usKrw, jpKrw) === usKrw ? '미국' : '한국'} 기준 가격이 가장 낮습니다.
+              현재 한국 ₩{krwBase.toLocaleString()} / 미국 환산 ₩{usKrw.toLocaleString()} / 일본 환산 ₩{jpKrw.toLocaleString()} 기준,{' '}
+              <span className="font-bold">
+                {Math.min(krwBase, usKrw, jpKrw) === jpKrw ? '일본' : Math.min(krwBase, usKrw, jpKrw) === usKrw ? '미국' : '한국'}
+              </span>{' '}
+              가격이 가장 낮습니다.
             </div>
           </section>
 
           <section className="panel p-5">
-            <div className="text-[36px] font-black tracking-tight text-white">할인 뉴스</div>
-            <div className="mt-1 text-lg text-white/58">게임 언론/프로모션 카드 UI</div>
+            <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">할인 뉴스</div>
+            <div className="mt-1 text-base text-white/58">게임 언론/프로모션 카드 UI</div>
             <div className="mt-5 space-y-4">
               {saleNews.map((item) => (
-                <div key={item.title} className="rounded-[22px] border border-white/6 bg-white/[0.03] p-5">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="text-2xl font-bold text-white">{item.title}</div>
-                    <span className="rounded-full border border-white/10 bg-[#322054] px-3 py-1 text-xs text-white/70">
+                <div key={item.title} className="rounded-[22px] border border-white/6 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    {/* 제목 줄바꿈 방지 — line-clamp-2로 최대 2줄 */}
+                    <div className="min-w-0 text-base font-bold leading-snug text-white line-clamp-2">
+                      {item.title}
+                    </div>
+                    <span className="flex-shrink-0 rounded-full border border-white/10 bg-[#322054] px-3 py-1 text-xs text-white/70">
                       {item.label}
                     </span>
                   </div>
-                  <div className="text-base leading-7 text-white/66">{item.text}</div>
+                  <div className="text-sm leading-6 text-white/66">{item.text}</div>
                 </div>
               ))}
             </div>
@@ -274,10 +259,11 @@ export function HomePage() {
         </aside>
       </div>
 
+      {/* ── 하단: 랭킹 미리보기 (별도 풀 너비 섹션) ── */}
       <section className="panel p-5 md:p-6">
         <div className="mb-5">
-          <div className="text-[36px] font-black tracking-tight text-white">랭킹 미리보기</div>
-          <div className="mt-1 text-lg text-white/58">스트리밍/최고 평점/가성비/호불호 섹션 일부</div>
+          <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">랭킹 미리보기</div>
+          <div className="mt-1 text-base text-white/58">스트리밍/최고 평점/가성비/호불호 섹션 일부</div>
         </div>
         <div className="grid gap-4 lg:grid-cols-4">
           <SummaryColumn title="스트리밍 Top" items={rankingGroups.streamerTop.slice(0, 3).map(getGame)} />

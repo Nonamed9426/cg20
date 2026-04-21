@@ -79,7 +79,7 @@ export function PredictPage({ game, related }: { game: Game; related: Game[] }) 
               <div className="mt-2 text-sm text-white/70">{game.reviewLabel}</div>
 
               <div className="mt-4 flex gap-2">
-                <Link href={`/games/${game.slug}`} className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">상세페이지 보기</Link>
+                <Link href={`/games/${game.steamAppId}`} className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">상세페이지 보기</Link>
                 <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">찜</button>
               </div>
 

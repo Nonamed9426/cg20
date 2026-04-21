@@ -3,7 +3,7 @@ import { Game, getSteamHeader } from '@/lib/data';
 
 export function GameCard({ game, compact = false }: { game: Game; compact?: boolean }) {
   return (
-    <Link href={`/games/${game.slug}`} className="panel-soft block overflow-hidden p-2 transition hover:-translate-y-1 hover:border-accent/70">
+    <Link href={`/games/${game.steamAppId}`} className="panel-soft block overflow-hidden p-2 transition hover:-translate-y-1 hover:border-accent/70">
       <img src={getSteamHeader(game.steamAppId)} alt={game.title} className={`w-full rounded-xl object-cover ${compact ? 'h-24' : 'h-32'}`} />
       <div className="p-2">
         <div className="line-clamp-1 text-sm font-semibold text-white">{game.title}</div>

@@ -321,6 +321,10 @@ export function getGame(slug: string) {
   return games.find((game) => game.slug === slug) ?? games[0];
 }
 
+export function getGameById(steamAppId: number) {
+  return games.find((game) => game.steamAppId === steamAppId) ?? games[0];
+}
+
 export function getDailyRecommendedGame(date = new Date()) {
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date.getTime() - start.getTime();

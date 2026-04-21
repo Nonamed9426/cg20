@@ -199,7 +199,7 @@ function TopThreeCards({ entries, platform }: { entries: GameStreamStat[]; platf
         return (
           <Link
             key={stat.slug}
-            href={`/games/${stat.slug}`}
+            href={`/games/${game.steamAppId}`}
             className={`relative overflow-hidden rounded-2xl border ${borderColors[idx]} ${bgColors[idx]} p-4 transition hover:border-accent/70`}
           >
             <div className="mb-2 flex items-center justify-between">
@@ -335,7 +335,7 @@ export function StreamerBoard() {
           return (
             <Link
               key={`${platform}-${stat.slug}`}
-              href={`/games/${stat.slug}`}
+              href={`/games/${game.steamAppId}`}
               className="grid grid-cols-[36px_100px_1fr_72px_64px_100px] items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3 transition hover:border-accent/70"
             >
               {/* 순위 번호 */}

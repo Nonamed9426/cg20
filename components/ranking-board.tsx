@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getRankingEntries, getSteamHeader } from '@/lib/data';
+import { games, getRankingEntries, getSteamHeader } from '@/lib/data';
 import { StreamerBoard } from '@/components/streamer-board';
 
 const tabs = [
@@ -11,7 +11,10 @@ const tabs = [
   { key: 'globalTop', label: '미국 top100' },
   { key: 'streamerTop', label: '스트리머 top100' },
   { key: 'bestWorst', label: 'best/worst top100' },
+  { key: 'genreTop', label: '장르별 top100' },
 ] as const;
+
+const GENRES = ['전체', '액션', 'RPG', '시뮬레이션', 'FPS', '스포츠', '협동', '인디'];
 
 const PAGE_SIZE = 10;
 
@@ -23,18 +26,38 @@ export function RankingBoard() {
 
   const [active, setActive] = useState<(typeof tabs)[number]['key']>(initialTab);
   const [page, setPage] = useState(initialPage);
+  const [genre, setGenre] = useState('전체');
 
-  useEffect(() => {
-    setActive(initialTab);
-  }, [initialTab]);
+  useEffect(() => { setActive(initialTab); }, [initialTab]);
+  useEffect(() => { setPage(initialPage); }, [initialPage]);
 
-  useEffect(() => {
-    setPage(initialPage);
-  }, [initialPage]);
+  // 장르별 탭용 엔트리
+  const genreEntries = useMemo(() => {
+    const filtered = genre === '전체'
+      ? games
+      : games.filter((g) => g.genre.includes(genre) || g.tags.includes(genre));
+    return filtered
+      .sort((a, b) => b.score - a.score)
+      .map((g, idx) => ({
+        rank: idx + 1,
+        game: g,
+        scoreText: `종합 점수 ${g.score}.0`,
+        badge: g.discountRate > 0 ? `${g.discountRate}% 할인 중` : '할인 없음',
+      }));
+  }, [genre]);
 
-  const allEntries = useMemo(() => getRankingEntries(active), [active]);
-  const totalPages = Math.ceil(allEntries.length / PAGE_SIZE);
-  const visible = useMemo(() => allEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [allEntries, page]);
+  const allEntries = useMemo(() => {
+    if (active === 'genreTop') return [];
+    return getRankingEntries(active);
+  }, [active]);
+  
+  const totalPages = Math.ceil(
+    (active === 'genreTop' ? genreEntries.length : allEntries.length) / PAGE_SIZE
+  );
+  const visible = useMemo(() => {
+    const entries = active === 'genreTop' ? genreEntries : allEntries;
+    return entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [active, genreEntries, allEntries, page]);
 
   const syncQuery = (tab: (typeof tabs)[number]['key'], nextPage: number) => {
     router.replace(`/rankings?tab=${tab}&page=${nextPage}`);
@@ -62,6 +85,7 @@ export function RankingBoard() {
         </div>
       </div>
 
+      {/* 탭 */}
       <div className="mb-5 flex flex-wrap gap-2">
         {tabs.map((tab) => (
           <button
@@ -74,7 +98,26 @@ export function RankingBoard() {
         ))}
       </div>
 
-      {/* streamerTop 탭이면 StreamerBoard, 나머지는 기존 목록 */}
+      {/* 장르 필터 (장르별 탭에서만 표시) */}
+      {active === 'genreTop' && (
+        <div className="mb-5 flex flex-wrap gap-2">
+          {GENRES.map((g) => (
+            <button
+              key={g}
+              onClick={() => { setGenre(g); setPage(1); }}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                genre === g
+                  ? 'border-[#ff70ea] bg-[#3d0f35] text-[#ffb3f0]'
+                  : 'border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80'
+              }`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* streamerTop 탭이면 StreamerBoard, 나머지는 목록 */}
       {active === 'streamerTop' ? (
         <StreamerBoard />
       ) : (
@@ -83,7 +126,7 @@ export function RankingBoard() {
             {visible.map((entry) => (
               <Link
                 key={`${active}-${entry.rank}-${entry.game.slug}`}
-                href={`/games/${entry.game.slug}`}
+                href={`/games/${entry.game.steamAppId}`}
                 className="grid grid-cols-[42px_132px_1fr_120px] items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3 transition hover:border-accent/70"
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#6e35dc] text-sm font-bold">

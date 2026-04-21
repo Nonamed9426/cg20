@@ -11,25 +11,35 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/predict/[slug]/page": [
+    "/games/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/predict/[slug]/page.js"
-    ],
-    "/games/[slug]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/games/[slug]/page.js"
+      "static/chunks/app/games/[id]/page.js"
     ],
     "/rankings/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/rankings/page.js"
     ],
-    "/search/page": [
+    "/predict/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/search/page.js"
+      "static/chunks/app/predict/[id]/page.js"
+    ],
+    "/sales/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/sales/page.js"
+    ],
+    "/recommend/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/recommend/page.js"
+    ],
+    "/insight/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/insight/page.js"
     ]
   }
 }

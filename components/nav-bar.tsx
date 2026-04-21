@@ -11,8 +11,11 @@ const items = [
   { href: '/predict/stardew-valley', label: '할인 예측' },
   { href: '/games/stardew-valley', label: '게임 상세' },
   { href: '/rankings', label: '게임 순위' },
-  { href: '/search', label: '검색' },
+  { href: '/sales', label: '세일 일정' },
+  { href: '/active', label: '활성 게임' },
   { href: '/recommend', label: '추천 받기' },
+  { href: '/insight', label: '인사이트' },
+  { href: '/search', label: '검색' }
 ];
 
 export function NavBar() {
