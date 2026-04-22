@@ -4,33 +4,116 @@ import { useState, useMemo } from 'react';
 import { games, getSteamHeader } from '@/lib/data';
 import type { Game } from '@/lib/data';
 
-// ─── 출시연도 ↔ 할인 빈도 더미 데이터 (FastAPI 연결 후 교체) ─────────────────
-// 교체 방법: const YEARLY_DISCOUNT = await fetch('/api/insight/discount-frequency').then(r => r.json())
-type YearlyDiscount = { year: number; avgFrequency: number; gameCount: number };
+// ═══════════════════════════════════════════════════════════════════
+//  더미 데이터 (FastAPI 연결 후 각 주석의 endpoint로 교체)
+// ═══════════════════════════════════════════════════════════════════
 
-const DUMMY_YEARLY_DISCOUNT: YearlyDiscount[] = [
-  { year: 2010, avgFrequency: 68.2, gameCount: 120 },
-  { year: 2011, avgFrequency: 65.4, gameCount: 198 },
-  { year: 2012, avgFrequency: 63.1, gameCount: 312 },
-  { year: 2013, avgFrequency: 60.8, gameCount: 487 },
-  { year: 2014, avgFrequency: 57.3, gameCount: 892 },
-  { year: 2015, avgFrequency: 54.9, gameCount: 1423 },
-  { year: 2016, avgFrequency: 51.2, gameCount: 2187 },
-  { year: 2017, avgFrequency: 47.6, gameCount: 3241 },
-  { year: 2018, avgFrequency: 43.8, gameCount: 4102 },
-  { year: 2019, avgFrequency: 39.4, gameCount: 5231 },
-  { year: 2020, avgFrequency: 34.7, gameCount: 6891 },
-  { year: 2021, avgFrequency: 28.3, gameCount: 7234 },
-  { year: 2022, avgFrequency: 21.6, gameCount: 8102 },
-  { year: 2023, avgFrequency: 14.2, gameCount: 9341 },
-  { year: 2024, avgFrequency:  7.8, gameCount: 7823 },
+// ── 1. 연도별 장르 트렌드 히트맵 ──────────────────────────────────
+// 교체: GET /api/insight/genre-trend  →  { years, genres, matrix }
+const GENRE_YEARS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+const GENRE_LABELS = ['액션', 'RPG', '인디', '전략', '시뮬', '어드벤처', '스포츠', '공포', '퍼즐', '캐주얼'];
+// matrix[genre][year] = 해당 연도 전체 대비 해당 장르 출시 비율 (%)
+const GENRE_MATRIX: number[][] = [
+  [18, 20, 22, 21, 19, 17, 18, 20, 22, 21], // 액션
+  [10, 11, 13, 15, 14, 12, 13, 14, 15, 13], // RPG
+  [20, 22, 25, 27, 28, 30, 32, 33, 31, 29], // 인디
+  [9,  8,  7,  8,  9,  8,  7,  6,  7,  8],  // 전략
+  [7,  8,  9,  8,  7,  9, 10, 11, 10,  9],  // 시뮬
+  [8,  9, 10, 10,  9, 10,  9,  8,  9, 10],  // 어드벤처
+  [5,  5,  4,  4,  5,  4,  3,  3,  4,  5],  // 스포츠
+  [4,  4,  5,  5,  6,  7,  6,  5,  5,  6],  // 공포
+  [6,  5,  4,  5,  6,  5,  4,  4,  5,  6],  // 퍼즐
+  [8,  7,  8,  8,  7,  8,  7,  6,  7,  8],  // 캐주얼
 ];
 
-// 회귀선 계산 (단순 선형회귀)
-function calcRegression(data: YearlyDiscount[]) {
+// ── 2. 출시연도 × 평균 할인율 산점도 ──────────────────────────────
+// 교체: GET /api/insight/release-discount  →  { year, avgDiscount, gameCount }[]
+type YearDiscount = { year: number; avgDiscount: number; gameCount: number };
+const DUMMY_RELEASE_DISCOUNT: YearDiscount[] = [
+  { year: 2010, avgDiscount: 62.4, gameCount: 120 },
+  { year: 2011, avgDiscount: 59.8, gameCount: 198 },
+  { year: 2012, avgDiscount: 57.3, gameCount: 312 },
+  { year: 2013, avgDiscount: 55.1, gameCount: 487 },
+  { year: 2014, avgDiscount: 52.7, gameCount: 892 },
+  { year: 2015, avgDiscount: 49.2, gameCount: 1423 },
+  { year: 2016, avgDiscount: 45.8, gameCount: 2187 },
+  { year: 2017, avgDiscount: 41.3, gameCount: 3241 },
+  { year: 2018, avgDiscount: 36.9, gameCount: 4102 },
+  { year: 2019, avgDiscount: 31.4, gameCount: 5231 },
+  { year: 2020, avgDiscount: 25.8, gameCount: 6891 },
+  { year: 2021, avgDiscount: 19.2, gameCount: 7234 },
+  { year: 2022, avgDiscount: 13.6, gameCount: 8102 },
+  { year: 2023, avgDiscount: 8.1,  gameCount: 9341 },
+  { year: 2024, avgDiscount: 3.2,  gameCount: 7823 },
+];
+
+// ── 3. 가짜 할인 의심 게임 순위 ────────────────────────────────────
+// 교체: GET /api/insight/fake-discount-ranking  →  { name, score, grade, reason }[]
+type FakeGame = { name: string; score: number; grade: '🔴' | '🟠' | '🟡' | '🟢'; reason: string };
+const DUMMY_FAKE_GAMES: FakeGame[] = [
+  { name: 'Cyberpunk 2077',     score: 82, grade: '🔴', reason: '출시 후 정가 2회 인상 후 할인' },
+  { name: 'ELDEN RING',         score: 71, grade: '🔴', reason: '상시 20% 할인 (출시 후 600일+)' },
+  { name: 'GTA V',              score: 68, grade: '🟠', reason: '요요 가격 패턴 4회 감지' },
+  { name: 'Dead by Daylight',   score: 55, grade: '🟠', reason: 'DLC 묶음 정가 인상 패턴' },
+  { name: 'Stardew Valley',     score: 28, grade: '🟡', reason: '할인 빈도 높으나 정가 유지' },
+  { name: 'PUBG',               score: 19, grade: '🟡', reason: '정기 세일만 적용됨' },
+  { name: 'Hollow Knight',      score: 5,  grade: '🟢', reason: '정상 할인 패턴' },
+  { name: 'Deep Rock Galactic', score: 3,  grade: '🟢', reason: '정상 할인 패턴' },
+];
+
+// ── 5. 리뷰 감성분석 ──────────────────────────────────────────────
+// 교체: GET /api/insight/review-sentiment?gameId={id}  →  { positive, negative, keywords }
+type ReviewStat = { positive: number; negative: number; keywords: { text: string; weight: number; isPos: boolean }[] };
+const DUMMY_REVIEWS: Record<number, ReviewStat> = {
+  413150: {
+    positive: 96, negative: 4,
+    keywords: [
+      { text: '힐링', weight: 9, isPos: true }, { text: '명작', weight: 8, isPos: true },
+      { text: '중독성', weight: 8, isPos: true }, { text: '귀여움', weight: 7, isPos: true },
+      { text: '음악', weight: 7, isPos: true }, { text: '반복', weight: 5, isPos: false },
+      { text: '느린속도', weight: 4, isPos: false }, { text: '가격', weight: 6, isPos: true },
+      { text: '업데이트', weight: 6, isPos: true }, { text: '멀티', weight: 5, isPos: true },
+    ],
+  },
+  1245620: {
+    positive: 94, negative: 6,
+    keywords: [
+      { text: '갓겜', weight: 9, isPos: true }, { text: '난이도', weight: 7, isPos: false },
+      { text: '전투', weight: 8, isPos: true }, { text: '오픈월드', weight: 8, isPos: true },
+      { text: '보스', weight: 7, isPos: true }, { text: '버그', weight: 5, isPos: false },
+      { text: '스토리', weight: 6, isPos: true }, { text: '그래픽', weight: 7, isPos: true },
+    ],
+  },
+  582010: {
+    positive: 90, negative: 10,
+    keywords: [
+      { text: '멀티', weight: 9, isPos: true }, { text: '협력', weight: 8, isPos: true },
+      { text: '핵유저', weight: 6, isPos: false }, { text: '스킨', weight: 5, isPos: false },
+      { text: '배틀로얄', weight: 7, isPos: true }, { text: '최적화', weight: 6, isPos: false },
+      { text: '긴장감', weight: 8, isPos: true }, { text: '무료', weight: 7, isPos: true },
+    ],
+  },
+};
+function getDefaultReview(game: Game): ReviewStat {
+  return {
+    positive: game.score, negative: 100 - game.score,
+    keywords: [
+      { text: '재미', weight: 8, isPos: true }, { text: '추천', weight: 7, isPos: true },
+      { text: '그래픽', weight: 6, isPos: true }, { text: '스토리', weight: 6, isPos: true },
+      { text: '버그', weight: 4, isPos: false }, { text: '가격', weight: 5, isPos: true },
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  유틸
+// ═══════════════════════════════════════════════════════════════════
+function formatKRW(n: number) { return `₩${n.toLocaleString()}`; }
+
+function calcRegression(data: { year: number; avgDiscount: number }[]) {
   const n = data.length;
   const xs = data.map((d) => d.year);
-  const ys = data.map((d) => d.avgFrequency);
+  const ys = data.map((d) => d.avgDiscount);
   const sumX = xs.reduce((a, b) => a + b, 0);
   const sumY = ys.reduce((a, b) => a + b, 0);
   const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
@@ -45,355 +128,291 @@ function calcRegression(data: YearlyDiscount[]) {
   return { slope, intercept, r2, r };
 }
 
-// ─── 더미 데이터 (FastAPI 연결 후 교체) ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  인사이트 1 — 연도별 장르 트렌드 히트맵
+// ═══════════════════════════════════════════════════════════════════
+function GenreHeatmap() {
+  const globalMax = Math.max(...GENRE_MATRIX.flat());
 
-type PriceHistory = { date: string; price: number; regularPrice: number; discount: number };
-type ReviewStat = { positive: number; negative: number; playtimeDist: { label: string; count: number }[] };
-type LangSupport = { name: string; hasVoice: boolean };
-
-const DUMMY_PRICE_HISTORY: Record<number, PriceHistory[]> = {
-  413150: [
-    { date: '2025-10', price: 12800, regularPrice: 12800, discount: 0 },
-    { date: '2025-11', price: 12800, regularPrice: 12800, discount: 0 },
-    { date: '2025-12', price: 6400,  regularPrice: 12800, discount: 50 },
-    { date: '2026-01', price: 12800, regularPrice: 12800, discount: 0 },
-    { date: '2026-02', price: 12800, regularPrice: 12800, discount: 0 },
-    { date: '2026-03', price: 7680,  regularPrice: 12800, discount: 40 },
-    { date: '2026-04', price: 7680,  regularPrice: 12800, discount: 40 },
-  ],
-  1245620: [
-    { date: '2025-10', price: 72000, regularPrice: 72000, discount: 0 },
-    { date: '2025-11', price: 72000, regularPrice: 72000, discount: 0 },
-    { date: '2025-12', price: 57600, regularPrice: 72000, discount: 20 },
-    { date: '2026-01', price: 72000, regularPrice: 72000, discount: 0 },
-    { date: '2026-02', price: 72000, regularPrice: 72000, discount: 0 },
-    { date: '2026-03', price: 64800, regularPrice: 72000, discount: 10 },
-    { date: '2026-04', price: 64800, regularPrice: 72000, discount: 10 },
-  ],
-  582010: [
-    { date: '2025-10', price: 32000, regularPrice: 32000, discount: 0 },
-    { date: '2025-11', price: 16000, regularPrice: 32000, discount: 50 },
-    { date: '2025-12', price: 9600,  regularPrice: 32000, discount: 70 },
-    { date: '2026-01', price: 32000, regularPrice: 32000, discount: 0 },
-    { date: '2026-02', price: 32000, regularPrice: 32000, discount: 0 },
-    { date: '2026-03', price: 16000, regularPrice: 32000, discount: 50 },
-    { date: '2026-04', price: 16000, regularPrice: 32000, discount: 50 },
-  ],
-};
-
-const DUMMY_REVIEWS: Record<number, ReviewStat> = {
-  413150: {
-    positive: 96, negative: 4,
-    playtimeDist: [
-      { label: '~10h', count: 8 },
-      { label: '10~30h', count: 15 },
-      { label: '30~100h', count: 38 },
-      { label: '100~300h', count: 28 },
-      { label: '300h+', count: 11 },
-    ],
-  },
-  1245620: {
-    positive: 94, negative: 6,
-    playtimeDist: [
-      { label: '~10h', count: 5 },
-      { label: '10~30h', count: 12 },
-      { label: '30~100h', count: 32 },
-      { label: '100~300h', count: 35 },
-      { label: '300h+', count: 16 },
-    ],
-  },
-  582010: {
-    positive: 90, negative: 10,
-    playtimeDist: [
-      { label: '~10h', count: 6 },
-      { label: '10~30h', count: 18 },
-      { label: '30~100h', count: 36 },
-      { label: '100~300h', count: 30 },
-      { label: '300h+', count: 10 },
-    ],
-  },
-};
-
-const DUMMY_LANGS: Record<number, LangSupport[]> = {
-  413150: [
-    { name: '한국어', hasVoice: false },
-    { name: '영어', hasVoice: true },
-    { name: '일본어', hasVoice: false },
-    { name: '중국어(간체)', hasVoice: false },
-    { name: '프랑스어', hasVoice: false },
-    { name: '독일어', hasVoice: false },
-  ],
-  1245620: [
-    { name: '한국어', hasVoice: false },
-    { name: '영어', hasVoice: true },
-    { name: '일본어', hasVoice: true },
-    { name: '중국어(간체)', hasVoice: false },
-  ],
-  582010: [
-    { name: '한국어', hasVoice: false },
-    { name: '영어', hasVoice: true },
-    { name: '일본어', hasVoice: true },
-    { name: '프랑스어', hasVoice: false },
-    { name: '독일어', hasVoice: false },
-    { name: '스페인어', hasVoice: false },
-  ],
-};
-
-// 기본 더미 (등록 안 된 게임)
-function getDefaultHistory(game: Game): PriceHistory[] {
-  return [
-    { date: '2025-10', price: game.originalKRW, regularPrice: game.originalKRW, discount: 0 },
-    { date: '2025-11', price: game.originalKRW, regularPrice: game.originalKRW, discount: 0 },
-    { date: '2025-12', price: Math.round(game.originalKRW * 0.7), regularPrice: game.originalKRW, discount: 30 },
-    { date: '2026-01', price: game.originalKRW, regularPrice: game.originalKRW, discount: 0 },
-    { date: '2026-02', price: game.originalKRW, regularPrice: game.originalKRW, discount: 0 },
-    { date: '2026-03', price: game.priceKRW, regularPrice: game.originalKRW, discount: game.discountRate },
-    { date: '2026-04', price: game.priceKRW, regularPrice: game.originalKRW, discount: game.discountRate },
-  ];
-}
-
-function getDefaultReview(game: Game): ReviewStat {
-  return {
-    positive: game.score,
-    negative: 100 - game.score,
-    playtimeDist: [
-      { label: '~10h', count: 10 },
-      { label: '10~30h', count: 20 },
-      { label: '30~100h', count: 35 },
-      { label: '100~300h', count: 25 },
-      { label: '300h+', count: 10 },
-    ],
-  };
-}
-
-function getDefaultLangs(): LangSupport[] {
-  return [
-    { name: '영어', hasVoice: true },
-    { name: '한국어', hasVoice: false },
-    { name: '일본어', hasVoice: false },
-  ];
-}
-
-// ─── 유틸 ────────────────────────────────────────────────────────────────────
-function formatKRW(n: number) {
-  return `₩${n.toLocaleString()}`;
-}
-
-// ─── 섹션 컴포넌트들 ──────────────────────────────────────────────────────────
-
-// 1. 가격 변동 추이
-function PriceChart({ history, game }: { history: PriceHistory[]; game: Game }) {
-  const maxPrice = Math.max(...history.map((h) => h.regularPrice));
-  const minPrice = Math.min(...history.map((h) => h.price));
-  const currentPrice = history[history.length - 1].price;
-  const isLowest = currentPrice === minPrice;
-
-  const chartH = 120;
-  const chartW = 100;
-  const points = history.map((h, i) => {
-    const x = (i / (history.length - 1)) * chartW;
-    const y = chartH - ((h.price / maxPrice) * chartH * 0.85) - 8;
-    return { x, y, ...h };
-  });
-  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${chartH} L 0 ${chartH} Z`;
+  function cellColor(val: number) {
+    const ratio = val / globalMax;
+    if (ratio > 0.85) return '#9b5cff';
+    if (ratio > 0.65) return '#c084fc';
+    if (ratio > 0.45) return '#d8b4fe';
+    if (ratio > 0.25) return 'rgba(216,180,254,0.25)';
+    return 'rgba(255,255,255,0.04)';
+  }
+  function textColor(val: number) {
+    const ratio = val / globalMax;
+    return ratio > 0.45 ? '#fff' : 'rgba(255,255,255,0.35)';
+  }
 
   return (
     <div className="panel-soft p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm font-semibold text-white">가격 변동 추이</div>
-        {isLowest && (
-          <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-bold text-emerald-400">
-            🏷 역대 최저가
-          </span>
-        )}
+      <div className="mb-1 text-sm font-semibold text-white">① 연도별 장르 트렌드</div>
+      <div className="mb-4 text-xs text-white/40">각 연도 전체 출시작 중 해당 장르 비율(%) — 히트맵</div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full border-separate border-spacing-[2px] text-center text-[11px]">
+          <thead>
+            <tr>
+              <th className="w-16 pb-1 text-left text-[10px] text-white/30">장르 \ 연도</th>
+              {GENRE_YEARS.map((y) => (
+                <th key={y} className="pb-1 text-[10px] font-normal text-white/40">{y}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {GENRE_LABELS.map((genre, gi) => (
+              <tr key={genre}>
+                <td className="pr-2 text-left text-[10px] text-white/60">{genre}</td>
+                {GENRE_MATRIX[gi].map((val, yi) => (
+                  <td
+                    key={yi}
+                    className="rounded-[3px] py-[5px] font-semibold"
+                    style={{ backgroundColor: cellColor(val), color: textColor(val) }}
+                  >
+                    {val}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="mb-4 flex gap-4">
-        <div>
-          <div className="text-xs text-white/45">현재가</div>
-          <div className="text-xl font-black text-mint">{formatKRW(currentPrice)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-white/45">역대 최저</div>
-          <div className="text-xl font-black text-emerald-400">{formatKRW(minPrice)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-white/45">정가</div>
-          <div className="text-xl font-black text-white/60">{formatKRW(maxPrice)}</div>
-        </div>
+      {/* 범례 */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="text-[10px] text-white/35">낮음</span>
+        {['rgba(255,255,255,0.04)', 'rgba(216,180,254,0.25)', '#d8b4fe', '#c084fc', '#9b5cff'].map((c, i) => (
+          <div key={i} className="h-3 w-6 rounded-sm" style={{ backgroundColor: c }} />
+        ))}
+        <span className="text-[10px] text-white/35">높음</span>
       </div>
 
-      {/* SVG 차트 */}
-      <div className="relative">
-        <svg viewBox={`0 0 100 ${chartH}`} className="w-full" style={{ height: 140 }} preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#64ffc8" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#64ffc8" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path d={areaD} fill="url(#priceGrad)" />
-          <path d={pathD} fill="none" stroke="#64ffc8" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-          {points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="2" fill={p.discount > 0 ? '#ff70ea' : '#64ffc8'} vectorEffect="non-scaling-stroke" />
-          ))}
-        </svg>
-        {/* X축 레이블 */}
-        <div className="mt-1 flex justify-between text-[10px] text-white/35">
-          {history.map((h) => <span key={h.date}>{h.date.slice(5)}</span>)}
-        </div>
+      <div className="mt-3 rounded-xl border border-[#c084fc]/20 bg-[#c084fc]/8 p-3 text-xs text-[#e9d5ff]">
+        💡 인디 장르는 2015년 이후 꾸준히 증가 추세. 액션은 전 연도에 걸쳐 안정적으로 높은 비율 유지.
       </div>
     </div>
   );
 }
 
-// 2. 가짜 할인 추적 + 할인 주기
-function FakeDiscountTracker({ history }: { history: PriceHistory[] }) {
-  const suspiciousMonths = history.filter((h, i) => {
-    if (i === 0) return false;
-    return h.regularPrice > history[i - 1].regularPrice;
-  });
-  const isSuspicious = suspiciousMonths.length > 0;
-  const discountMonths = history.filter((h) => h.discount > 0);
+// ═══════════════════════════════════════════════════════════════════
+//  인사이트 2 — 출시연도 × 평균 할인율 산점도
+// ═══════════════════════════════════════════════════════════════════
+function ReleaseDiscountScatter() {
+  const data = DUMMY_RELEASE_DISCOUNT;
+  const { slope, intercept, r, r2 } = calcRegression(data);
+
+  const svgW = 320, svgH = 180, padL = 38, padR = 12, padT = 12, padB = 28;
+  const plotW = svgW - padL - padR;
+  const plotH = svgH - padT - padB;
+
+  const minYear = data[0].year, maxYear = data[data.length - 1].year;
+  const maxDiscount = Math.max(...data.map((d) => d.avgDiscount));
+  const maxCount = Math.max(...data.map((d) => d.gameCount));
+
+  function toX(year: number) { return padL + ((year - minYear) / (maxYear - minYear)) * plotW; }
+  function toY(pct: number)  { return padT + plotH - (pct / maxDiscount) * plotH; }
+  function toR(count: number){ return 3 + (count / maxCount) * 8; }
+
+  const x1 = toX(minYear),   y1 = toY(slope * minYear + intercept);
+  const x2 = toX(maxYear),   y2 = toY(slope * maxYear + intercept);
+  const yTicks = [0, 20, 40, 60];
 
   return (
     <div className="panel-soft p-5">
-      <div className="mb-4 text-sm font-semibold text-white">가짜 할인 추적</div>
-      <div className={`mb-4 rounded-xl border p-3 ${isSuspicious ? 'border-red-400/30 bg-red-400/10' : 'border-emerald-400/30 bg-emerald-400/10'}`}>
-        <div className={`text-sm font-bold ${isSuspicious ? 'text-red-400' : 'text-emerald-400'}`}>
-          {isSuspicious ? '⚠️ 정가 인상 후 할인 의심' : '✅ 정상적인 할인 패턴'}
-        </div>
-        <div className="mt-1 text-xs text-white/55">
-          {isSuspicious
-            ? `${suspiciousMonths.length}회 정가 인상 감지됨`
-            : '정가 변동 없이 일관된 할인'}
-        </div>
+      <div className="mb-1 text-sm font-semibold text-white">② 출시연도 × 평균 할인율</div>
+      <div className="mb-3 text-xs text-white/40">오래된 게임일수록 더 많이 할인될까? — 산점도 (원 크기 = 게임 수)</div>
+
+      <div className="mb-3 flex gap-2 flex-wrap">
+        <span className="rounded-full bg-[#c084fc]/15 px-3 py-0.5 text-xs text-[#c084fc]">r = {r.toFixed(3)}</span>
+        <span className="rounded-full bg-[#64ffc8]/15 px-3 py-0.5 text-xs text-emerald-400">R² = {r2.toFixed(3)}</span>
+        <span className="rounded-full bg-white/8 px-3 py-0.5 text-xs text-white/50">원 크기 = 게임 수</span>
       </div>
 
-      <div className="mb-3 text-xs font-semibold text-white/60">할인 주기</div>
-      <div className="flex gap-1">
-        {history.map((h) => (
-          <div key={h.date} className="flex-1 text-center">
-            <div
-              className={`mx-auto mb-1 h-8 w-full rounded-md ${h.discount > 0 ? 'bg-[#ff70ea]/60' : 'bg-white/8'}`}
-              style={{ opacity: h.discount > 0 ? 0.4 + h.discount / 100 : 0.3 }}
-            />
-            <div className="text-[9px] text-white/30">{h.date.slice(5)}</div>
-            {h.discount > 0 && (
-              <div className="text-[9px] text-[#ff70ea]">-{h.discount}%</div>
-            )}
+      <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full" style={{ height: 200 }}>
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line x1={padL} y1={toY(t)} x2={svgW - padR} y2={toY(t)}
+              stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+            <text x={padL - 4} y={toY(t) + 3} textAnchor="end" fontSize="7" fill="rgba(255,255,255,0.3)">{t}%</text>
+          </g>
+        ))}
+        <line x1={x1} y1={y1} x2={x2} y2={y2}
+          stroke="#64ffc8" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
+        {data.map((d) => (
+          <g key={d.year}>
+            <circle cx={toX(d.year)} cy={toY(d.avgDiscount)} r={toR(d.gameCount)}
+              fill="#9b5cff" fillOpacity="0.7" stroke="#c084fc" strokeWidth="0.5" />
+            <text x={toX(d.year)} y={toY(d.avgDiscount) - toR(d.gameCount) - 2}
+              textAnchor="middle" fontSize="6.5" fill="rgba(255,255,255,0.5)">{d.year}</text>
+          </g>
+        ))}
+        <line x1={padL} y1={svgH - padB} x2={svgW - padR} y2={svgH - padB}
+          stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+      </svg>
+
+      <div className="mt-3 rounded-xl border border-[#c084fc]/20 bg-[#c084fc]/8 p-3 text-xs text-[#e9d5ff]">
+        💡 {r < -0.8
+          ? '강한 음의 상관관계 — 출시가 오래될수록 할인율이 뚜렷하게 높아집니다.'
+          : r < -0.5
+          ? '중간 음의 상관관계 — 오래된 게임일수록 할인 경향이 있습니다.'
+          : '약한 상관관계 — 출시 연도만으로 할인율을 설명하기 어렵습니다.'}
+      </div>
+      <div className="mt-1 text-[10px] text-white/25">
+        * 더미 데이터 — FastAPI 연결 후 <code className="text-white/35">/api/insight/release-discount</code> 로 교체
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  인사이트 3 — 가짜 할인 의심 게임 순위 (막대 그래프)
+// ═══════════════════════════════════════════════════════════════════
+function FakeDiscountRanking() {
+  const gradeColor: Record<string, string> = {
+    '🔴': '#ef4444', '🟠': '#f97316', '🟡': '#eab308', '🟢': '#22c55e',
+  };
+  const gradeLabel: Record<string, string> = {
+    '🔴': '매우 의심', '🟠': '약간 의심', '🟡': '주의', '🟢': '정상',
+  };
+
+  return (
+    <div className="panel-soft p-5">
+      <div className="mb-1 text-sm font-semibold text-white">③ 가짜 할인 의심 게임 순위</div>
+      <div className="mb-3 text-xs text-white/40">의심 점수 0~100점 (정가 인상·상시 할인·요요 패턴 등 종합) — 막대 그래프</div>
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {Object.entries(gradeLabel).map(([emoji, label]) => (
+          <span key={emoji} className="flex items-center gap-1 text-[10px] text-white/50">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: gradeColor[emoji] }} />
+            {emoji} {label}
+          </span>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        {DUMMY_FAKE_GAMES.map((g) => (
+          <div key={g.name}>
+            <div className="mb-0.5 flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1 text-white/80">
+                {g.grade} <span className="max-w-[160px] truncate">{g.name}</span>
+              </span>
+              <span className="font-bold" style={{ color: gradeColor[g.grade] }}>{g.score}점</span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full bg-white/8">
+              <div className="h-full rounded-full"
+                style={{ width: `${g.score}%`, background: gradeColor[g.grade], opacity: 0.8 }} />
+            </div>
+            <div className="mt-0.5 text-[9px] text-white/30">{g.reason}</div>
           </div>
         ))}
       </div>
-      <div className="mt-3 text-xs text-white/40">
-        최근 {history.length}개월 중 {discountMonths.length}회 할인
+
+      <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/8 p-3 text-xs text-red-300">
+        💡 60점 이상은 구매 전 가격 히스토리를 반드시 확인하세요.
+      </div>
+      <div className="mt-1 text-[10px] text-white/25">
+        * 더미 데이터 — FastAPI 연결 후 <code className="text-white/35">/api/insight/fake-discount-ranking</code> 로 교체
       </div>
     </div>
   );
 }
 
-// 3. 리뷰 인사이트
-function ReviewInsight({ review }: { review: ReviewStat }) {
-  const maxCount = Math.max(...review.playtimeDist.map((d) => d.count));
-  const circumference = 2 * Math.PI * 36;
-  const positiveDash = (review.positive / 100) * circumference;
-
-  return (
-    <div className="panel-soft p-5">
-      <div className="mb-4 text-sm font-semibold text-white">리뷰 인사이트</div>
-      <div className="grid grid-cols-2 gap-4">
-        {/* 도넛 차트 */}
-        <div className="flex flex-col items-center">
-          <div className="relative flex h-24 w-24 items-center justify-center">
-            <svg viewBox="0 0 80 80" className="absolute inset-0 -rotate-90">
-              <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-              <circle
-                cx="40" cy="40" r="36" fill="none"
-                stroke="#64ffc8" strokeWidth="8"
-                strokeDasharray={`${positiveDash} ${circumference}`}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="text-center">
-              <div className="text-lg font-black text-emerald-400">{review.positive}%</div>
-              <div className="text-[9px] text-white/40">긍정</div>
-            </div>
-          </div>
-          <div className="mt-2 flex gap-3 text-xs">
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />긍정 {review.positive}%</span>
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-white/20" />부정 {review.negative}%</span>
-          </div>
-        </div>
-
-        {/* 플레이타임 분포 */}
-        <div>
-          <div className="mb-2 text-xs text-white/50">플레이타임 분포</div>
-          <div className="space-y-1.5">
-            {review.playtimeDist.map((d) => (
-              <div key={d.label} className="flex items-center gap-2">
-                <div className="w-12 text-right text-[10px] text-white/40">{d.label}</div>
-                <div className="flex-1 rounded-full bg-white/8">
-                  <div
-                    className="h-2 rounded-full bg-gradient-to-r from-[#9b5cff] to-[#ff70ea]"
-                    style={{ width: `${(d.count / maxCount) * 100}%` }}
-                  />
-                </div>
-                <div className="w-6 text-[10px] text-white/40">{d.count}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 4. 국가별 가격 비교
-function CountryPriceCompare({ game }: { game: Game }) {
+// ═══════════════════════════════════════════════════════════════════
+//  인사이트 4 — 국가별 가격 비교 (레이더 차트)
+// ═══════════════════════════════════════════════════════════════════
+function CountryPriceRadar({ game }: { game: Game }) {
+  const isFree = game.priceKRW === 0;
   const krw = game.priceKRW;
   const usdKrw = Math.round(parseFloat(game.prices.us.replace('$', '').replace('Free', '0')) * 1376);
   const jpyKrw = Math.round(parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0')) * 9.12);
 
-  const isFree = game.priceKRW === 0;
-  const prices = [
-    { country: '🇰🇷 한국', price: krw, raw: game.prices.kr, krwEquiv: krw },
-    { country: '🇺🇸 미국', price: usdKrw, raw: game.prices.us, krwEquiv: usdKrw },
-    { country: '🇯🇵 일본', price: jpyKrw, raw: game.prices.jp, krwEquiv: jpyKrw },
+  const countries = [
+    { label: '🇰🇷 한국', raw: game.prices.kr, krwEquiv: krw,    color: '#c084fc' },
+    { label: '🇺🇸 미국', raw: game.prices.us, krwEquiv: usdKrw, color: '#60a5fa' },
+    { label: '🇯🇵 일본', raw: game.prices.jp, krwEquiv: jpyKrw, color: '#f472b6' },
   ];
-  const minPrice = Math.min(...prices.map((p) => p.krwEquiv));
-  const maxKrw = Math.max(...prices.map((p) => p.krwEquiv)) || 1;
+  const maxKrw = Math.max(...countries.map((c) => c.krwEquiv)) || 1;
+  const minKrw = Math.min(...countries.map((c) => c.krwEquiv));
+  const cheapest = countries.find((c) => c.krwEquiv === minKrw)!;
+
+  const cx = 90, cy = 90, maxR = 62;
+  const angles = [-90, 30, 150];
+  function polarToXY(deg: number, r: number) {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  const gridLevels = [0.25, 0.5, 0.75, 1.0];
+  const axisPoints = angles.map((a) => polarToXY(a, maxR));
+
+  function radarPath(values: number[]) {
+    const pts = values.map((v, i) => {
+      const r = (v / maxKrw) * maxR;
+      return polarToXY(angles[i], r);
+    });
+    return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+  }
 
   return (
     <div className="panel-soft p-5">
-      <div className="mb-4 text-sm font-semibold text-white">국가별 가격 비교</div>
+      <div className="mb-1 text-sm font-semibold text-white">④ 국가별 가격 비교</div>
+      <div className="mb-4 text-xs text-white/40">KRW 환산 기준 (USD ×1,376 / JPY ×9.12) — 레이더 차트</div>
+
       {isFree ? (
-        <div className="text-center text-sm text-emerald-400 font-bold py-4">무료 게임입니다</div>
+        <div className="py-8 text-center text-sm font-bold text-emerald-400">무료 게임입니다 🎮</div>
       ) : (
-        <div className="space-y-3">
-          {prices.map((p) => (
-            <div key={p.country}>
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-white/70">{p.country}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-white/50">{p.raw}</span>
-                  <span className={`font-bold ${p.krwEquiv === minPrice ? 'text-emerald-400' : 'text-white/70'}`}>
-                    {formatKRW(p.krwEquiv)}
-                    {p.krwEquiv === minPrice && ' 🏆'}
-                  </span>
+        <div className="flex flex-col items-center gap-4 sm:flex-row">
+          <svg viewBox="0 0 180 180" className="w-40 shrink-0">
+            {gridLevels.map((lv) => {
+              const pts = angles.map((a) => polarToXY(a, maxR * lv));
+              const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+              return <path key={lv} d={d} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />;
+            })}
+            {axisPoints.map((pt, i) => (
+              <line key={i} x1={cx} y1={cy} x2={pt.x} y2={pt.y}
+                stroke="rgba(255,255,255,0.12)" strokeWidth="0.5" />
+            ))}
+            <path d={radarPath(countries.map((c) => c.krwEquiv))}
+              fill="rgba(155,92,255,0.2)" stroke="#9b5cff" strokeWidth="1.5" />
+            {countries.map((c, i) => {
+              const r = (c.krwEquiv / maxKrw) * maxR;
+              const pt = polarToXY(angles[i], r);
+              return <circle key={i} cx={pt.x} cy={pt.y} r="3.5" fill={c.color} />;
+            })}
+            {countries.map((c, i) => {
+              const pt = polarToXY(angles[i], maxR + 15);
+              return (
+                <text key={i} x={pt.x} y={pt.y} textAnchor="middle"
+                  dominantBaseline="middle" fontSize="8" fill="rgba(255,255,255,0.6)">
+                  {c.label}
+                </text>
+              );
+            })}
+          </svg>
+
+          <div className="flex-1 w-full space-y-3">
+            {countries.map((c) => (
+              <div key={c.label}>
+                <div className="mb-0.5 flex justify-between text-xs">
+                  <span className="text-white/70">{c.label}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-white/45">{c.raw}</span>
+                    <span className="font-bold" style={{ color: c.color }}>{formatKRW(c.krwEquiv)}</span>
+                    {c.krwEquiv === minKrw && <span className="text-emerald-400">🏆</span>}
+                  </div>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-white/8">
+                  <div className="h-full rounded-full"
+                    style={{ width: `${(c.krwEquiv / maxKrw) * 100}%`, background: c.color, opacity: 0.75 }} />
                 </div>
               </div>
-              <div className="h-2 rounded-full bg-white/8">
-                <div
-                  className={`h-2 rounded-full ${p.krwEquiv === minPrice ? 'bg-emerald-400' : 'bg-[#9b5cff]'}`}
-                  style={{ width: `${(p.krwEquiv / maxKrw) * 100}%` }}
-                />
-              </div>
+            ))}
+            <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/8 p-2 text-xs text-emerald-300">
+              {cheapest.label} 구매가 가장 저렴해요 ({formatKRW(minKrw)})
             </div>
-          ))}
-          <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/8 p-3 text-xs text-emerald-300">
-            {prices.find((p) => p.krwEquiv === minPrice)?.country} 구매가 가장 저렴해요
-            {' '}(환율 기준 {formatKRW(minPrice)})
           </div>
         </div>
       )}
@@ -401,146 +420,112 @@ function CountryPriceCompare({ game }: { game: Game }) {
   );
 }
 
-// 5. 언어 지원 현황
-function LanguageSupport({ langs }: { langs: LangSupport[] }) {
-  const hasKorean = langs.some((l) => l.name === '한국어');
-  const voiceCount = langs.filter((l) => l.hasVoice).length;
+// ═══════════════════════════════════════════════════════════════════
+//  인사이트 5 — 리뷰 감성분석 (파이차트 + 워드클라우드)
+// ═══════════════════════════════════════════════════════════════════
+function ReviewSentiment({ review }: { review: ReviewStat }) {
+  const circumference = 2 * Math.PI * 38;
+  const posDash = (review.positive / 100) * circumference;
+  const isGod   = review.positive >= 80;
+  const isDdong = review.positive < 50;
+  const label      = isGod ? '갓겜 🎮' : isDdong ? '똥겜 💩' : '보통';
+  const labelColor = isGod ? '#64ffc8' : isDdong ? '#ef4444' : '#f59e0b';
+
+  function fontSize(w: number) { return 10 + (w - 1) * 1.5; }
 
   return (
     <div className="panel-soft p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm font-semibold text-white">언어 지원 현황</div>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${hasKorean ? 'bg-[#ff70ea]/15 text-[#ff70ea]' : 'bg-white/8 text-white/40'}`}>
-          {hasKorean ? '🇰🇷 한국어 지원' : '한국어 미지원'}
-        </span>
-      </div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {langs.map((l) => (
-          <span
-            key={l.name}
-            className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${
-              l.name === '한국어'
-                ? 'border-[#ff70ea]/30 bg-[#ff70ea]/10 text-[#ff70ea]'
-                : 'border-white/10 bg-white/5 text-white/60'
-            }`}
-          >
-            {l.name}
-            {l.hasVoice && <span className="text-[#c084fc]">🎙</span>}
-          </span>
-        ))}
-      </div>
-      <div className="text-xs text-white/40">
-        총 {langs.length}개 언어 지원 · 음성 지원 {voiceCount}개
-      </div>
-    </div>
-  );
-}
+      <div className="mb-1 text-sm font-semibold text-white">⑤ 리뷰 감성분석</div>
+      <div className="mb-4 text-xs text-white/40">긍정/부정 비율 및 주요 키워드 — 파이차트 + 워드클라우드</div>
 
-// ─── 6. 출시연도 ↔ 할인 빈도 상관관계 차트 ──────────────────────────────────
-function CorrelationChart({ data }: { data: YearlyDiscount[] }) {
-  const { slope, intercept, r2, r } = calcRegression(data);
-  const maxFreq = Math.max(...data.map((d) => d.avgFrequency));
-  const chartH = 140;
-  const chartW = 100;
-  const barWidth = chartW / data.length - 1;
-  const toSvgY = (freq: number) => chartH - (freq / maxFreq) * chartH * 0.88 - 6;
-  const regSvgY1 = toSvgY(slope * data[0].year + intercept);
-  const regSvgY2 = toSvgY(slope * data[data.length - 1].year + intercept);
-
-  const interpretation = r < -0.7
-    ? "강한 음의 상관관계 — 출시가 오래될수록 할인 빈도가 높아집니다"
-    : r < -0.4
-    ? "중간 음의 상관관계 — 출시 연도와 할인 빈도가 반비례하는 경향이 있습니다"
-    : "약한 상관관계";
-
-  return (
-    <div className="panel-soft p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-white">출시연도 ↔ 할인 빈도 상관관계</div>
-        <div className="flex gap-2 flex-wrap">
-          <span className="rounded-full bg-[#c084fc]/15 px-2 py-0.5 text-xs text-[#c084fc] whitespace-nowrap">
-            r = {r.toFixed(3)}
-          </span>
-          <span className="rounded-full bg-[#64ffc8]/15 px-2 py-0.5 text-xs text-emerald-400 whitespace-nowrap">
-            R² = {r2.toFixed(3)}
-          </span>
-        </div>
-      </div>
-
-      {/* SVG 바 차트 + 회귀선 */}
-      <div className="relative mb-3">
-        <svg viewBox={`0 0 100 ${chartH}`} className="w-full" style={{ height: 160 }} preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#9b5cff" stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#ff70ea" stopOpacity="0.5" />
-            </linearGradient>
-          </defs>
-          {data.map((d, i) => {
-            const x = i * (chartW / data.length);
-            const barH = (d.avgFrequency / maxFreq) * chartH * 0.88;
-            const y = chartH - barH;
-            return (
-              <rect key={d.year} x={x + 0.3} y={y} width={barWidth} height={barH}
-                fill="url(#barGrad)" rx="0.5" opacity="0.85" />
-            );
-          })}
-          <line x1={0} y1={regSvgY1} x2={chartW} y2={regSvgY2}
-            stroke="#64ffc8" strokeWidth="1.2" strokeDasharray="3 2"
-            vectorEffect="non-scaling-stroke" />
-        </svg>
-        <div className="flex justify-between mt-1">
-          {data.filter((_, i) => i % 3 === 0).map((d) => (
-            <span key={d.year} className="text-[9px] text-white/30">{d.year}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* 데이터 테이블 */}
-      <div className="mb-4 max-h-36 overflow-y-auto space-y-1">
-        {data.map((d) => (
-          <div key={d.year} className="flex items-center gap-2 text-xs">
-            <span className="w-10 shrink-0 text-white/50">{d.year}년</span>
-            <div className="flex-1 h-2 rounded-full bg-white/8">
-              <div className="h-2 rounded-full bg-gradient-to-r from-[#9b5cff] to-[#ff70ea]"
-                style={{ width: `${(d.avgFrequency / maxFreq) * 100}%` }} />
+      <div className="grid gap-6 sm:grid-cols-2">
+        {/* 도넛 파이차트 */}
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="relative flex h-32 w-32 items-center justify-center">
+            <svg viewBox="0 0 88 88" className="absolute inset-0 -rotate-90">
+              <circle cx="44" cy="44" r="38" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="10" />
+              <circle cx="44" cy="44" r="38" fill="none"
+                stroke={labelColor} strokeWidth="10"
+                strokeDasharray={`${posDash} ${circumference}`}
+                strokeLinecap="butt"
+              />
+            </svg>
+            <div className="z-10 text-center">
+              <div className="text-2xl font-black" style={{ color: labelColor }}>{review.positive}%</div>
+              <div className="text-[10px] text-white/50">긍정</div>
             </div>
-            <span className="w-10 shrink-0 text-right text-[#c084fc]">{d.avgFrequency}%</span>
-            <span className="w-14 shrink-0 text-right text-white/30">{d.gameCount.toLocaleString()}개</span>
           </div>
-        ))}
+          <div className="text-center">
+            <div className="text-base font-bold" style={{ color: labelColor }}>{label}</div>
+            <div className="text-xs text-white/40">부정 {review.negative}%</div>
+          </div>
+          <div className="flex gap-3 text-xs">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: labelColor }} />
+              긍정 {review.positive}%
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-white/20" />
+              부정 {review.negative}%
+            </span>
+          </div>
+        </div>
+
+        {/* 워드클라우드 */}
+        <div>
+          <div className="mb-2 text-xs text-white/50">주요 리뷰 키워드</div>
+          <div className="flex min-h-[100px] flex-wrap items-end gap-2">
+            {review.keywords.map((kw) => (
+              <span
+                key={kw.text}
+                className="rounded-lg px-2 py-0.5 font-bold"
+                style={{
+                  fontSize: `${fontSize(kw.weight)}px`,
+                  color:  kw.isPos ? '#64ffc8' : '#f87171',
+                  background: kw.isPos ? 'rgba(100,255,200,0.08)' : 'rgba(248,113,113,0.08)',
+                  border: `1px solid ${kw.isPos ? 'rgba(100,255,200,0.2)' : 'rgba(248,113,113,0.2)'}`,
+                }}
+              >
+                {kw.text}
+              </span>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-white/35">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" /> 긍정 키워드
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-red-400" /> 부정 키워드
+            </span>
+            <span>글자 크기 = 언급 빈도</span>
+          </div>
+        </div>
       </div>
 
-      {/* 해석 */}
-      <div className="rounded-xl border border-[#c084fc]/20 bg-[#c084fc]/8 p-3 text-xs text-[#e9d5ff]">
-        📊 {interpretation}
-      </div>
-      <div className="mt-2 text-[10px] text-white/30">
-        * 더미 데이터 — FastAPI 연결 후 <code className="text-white/40">/api/insight/discount-frequency</code> 로 교체
+      <div className="mt-3 text-[10px] text-white/25">
+        * 더미 데이터 — FastAPI 연결 후 <code className="text-white/35">/api/insight/review-sentiment?gameId={'{id}'}</code> 로 교체
       </div>
     </div>
   );
 }
 
-// ─── 메인 컴포넌트 ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  메인 컴포넌트
+// ═══════════════════════════════════════════════════════════════════
 export default function InsightPageClient() {
-  const [selectedId, setSelectedId] = useState<number>(games[0].steamAppId);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedId, setSelectedId]     = useState<number>(games[0].steamAppId);
+  const [searchQuery, setSearchQuery]   = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const filteredGames = useMemo(() =>
-    games.filter((g) => g.title.toLowerCase().includes(searchQuery.toLowerCase())),
-    [searchQuery]
+  const filteredGames = useMemo(
+    () => games.filter((g) => g.title.toLowerCase().includes(searchQuery.toLowerCase())),
+    [searchQuery],
   );
-
-  const selectedGame = useMemo(() =>
-    games.find((g) => g.steamAppId === selectedId) ?? games[0],
-    [selectedId]
+  const selectedGame = useMemo(
+    () => games.find((g) => g.steamAppId === selectedId) ?? games[0],
+    [selectedId],
   );
-
-  const priceHistory = DUMMY_PRICE_HISTORY[selectedId] ?? getDefaultHistory(selectedGame);
   const reviewStat = DUMMY_REVIEWS[selectedId] ?? getDefaultReview(selectedGame);
-  const langs = DUMMY_LANGS[selectedId] ?? getDefaultLangs();
 
   return (
     <div className="space-y-6">
@@ -563,23 +548,30 @@ export default function InsightPageClient() {
           </h1>
         </div>
         <p className="mt-1 text-sm text-white/50">
-          가격 변동 · 할인 패턴 · 리뷰 분석 · 국가별 가격 · 언어 지원을 한눈에
+          장르 트렌드 · 할인 패턴 분석 · 가짜 할인 추적 · 국가별 가격 비교 · 리뷰 감성분석
         </p>
       </div>
 
-      {/* ── 게임 선택 ── */}
+      {/* ── ① ② 전역 인사이트 (게임 선택 불필요) ── */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2"><GenreHeatmap /></div>
+        <div className="md:col-span-2"><ReleaseDiscountScatter /></div>
+      </div>
+
+      {/* ── ③ 가짜 할인 (전역 순위) ── */}
+      <FakeDiscountRanking />
+
+      {/* ── 게임 선택 구분선 (④ ⑤ 게임별 인사이트) ── */}
       <div className="panel p-5">
-        <div className="mb-3 text-sm font-semibold text-white">게임 선택</div>
+        <div className="mb-1 text-sm font-semibold text-white">게임별 인사이트</div>
+        <div className="mb-3 text-xs text-white/40">④ 국가별 가격 비교, ⑤ 리뷰 감성분석은 게임별로 확인할 수 있어요</div>
         <div className="relative">
           <div
             className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-[#1a1033] p-3 transition hover:border-[#c084fc]/50"
             onClick={() => setDropdownOpen(!dropdownOpen)}
           >
-            <img
-              src={getSteamHeader(selectedGame.steamAppId)}
-              alt={selectedGame.title}
-              className="h-10 w-16 rounded-lg object-cover"
-            />
+            <img src={getSteamHeader(selectedGame.steamAppId)} alt={selectedGame.title}
+              className="h-10 w-16 rounded-lg object-cover" />
             <div className="flex-1">
               <div className="text-sm font-semibold text-white">{selectedGame.title}</div>
               <div className="text-xs text-white/45">{selectedGame.genre.join(' · ')}</div>
@@ -618,38 +610,18 @@ export default function InsightPageClient() {
         </div>
       </div>
 
-      {/* ── 인사이트 그리드 ── */}
+      {/* ── ④ ⑤ 게임별 인사이트 ── */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* 1. 가격 변동 추이 — 넓게 */}
-        <div className="md:col-span-2">
-          <PriceChart history={priceHistory} game={selectedGame} />
-        </div>
-
-        {/* 2. 가짜 할인 추적 */}
-        <FakeDiscountTracker history={priceHistory} />
-
-        {/* 3. 리뷰 인사이트 */}
-        <ReviewInsight review={reviewStat} />
-
-        {/* 4. 국가별 가격 비교 */}
-        <CountryPriceCompare game={selectedGame} />
-
-        {/* 5. 언어 지원 현황 */}
-        <LanguageSupport langs={langs} />
-
-        {/* 6. 출시연도 ↔ 할인 빈도 상관관계 — 넓게 */}
-        <div className="md:col-span-2">
-          <CorrelationChart data={DUMMY_YEARLY_DISCOUNT} />
-        </div>
+        <CountryPriceRadar game={selectedGame} />
+        <ReviewSentiment review={reviewStat} />
       </div>
 
       {/* DB 연결 안내 */}
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs leading-6 text-white/35">
         현재 더미 데이터입니다. FastAPI 연결 후{' '}
+        <code className="text-white/50">games</code>,{' '}
         <code className="text-white/50">game_price_history</code>,{' '}
-        <code className="text-white/50">game_reviews</code>,{' '}
-        <code className="text-white/50">game_languages</code>,{' '}
-        <code className="text-white/50">/api/insight/discount-frequency</code> 를 API fetch로 교체하세요.
+        <code className="text-white/50">game_reviews</code> 테이블을 각 API endpoint로 교체하세요.
       </div>
     </div>
   );
