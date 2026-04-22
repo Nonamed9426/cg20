@@ -4,6 +4,47 @@ import { useState, useMemo } from 'react';
 import { games, getSteamHeader } from '@/lib/data';
 import type { Game } from '@/lib/data';
 
+// ─── 출시연도 ↔ 할인 빈도 더미 데이터 (FastAPI 연결 후 교체) ─────────────────
+// 교체 방법: const YEARLY_DISCOUNT = await fetch('/api/insight/discount-frequency').then(r => r.json())
+type YearlyDiscount = { year: number; avgFrequency: number; gameCount: number };
+
+const DUMMY_YEARLY_DISCOUNT: YearlyDiscount[] = [
+  { year: 2010, avgFrequency: 68.2, gameCount: 120 },
+  { year: 2011, avgFrequency: 65.4, gameCount: 198 },
+  { year: 2012, avgFrequency: 63.1, gameCount: 312 },
+  { year: 2013, avgFrequency: 60.8, gameCount: 487 },
+  { year: 2014, avgFrequency: 57.3, gameCount: 892 },
+  { year: 2015, avgFrequency: 54.9, gameCount: 1423 },
+  { year: 2016, avgFrequency: 51.2, gameCount: 2187 },
+  { year: 2017, avgFrequency: 47.6, gameCount: 3241 },
+  { year: 2018, avgFrequency: 43.8, gameCount: 4102 },
+  { year: 2019, avgFrequency: 39.4, gameCount: 5231 },
+  { year: 2020, avgFrequency: 34.7, gameCount: 6891 },
+  { year: 2021, avgFrequency: 28.3, gameCount: 7234 },
+  { year: 2022, avgFrequency: 21.6, gameCount: 8102 },
+  { year: 2023, avgFrequency: 14.2, gameCount: 9341 },
+  { year: 2024, avgFrequency:  7.8, gameCount: 7823 },
+];
+
+// 회귀선 계산 (단순 선형회귀)
+function calcRegression(data: YearlyDiscount[]) {
+  const n = data.length;
+  const xs = data.map((d) => d.year);
+  const ys = data.map((d) => d.avgFrequency);
+  const sumX = xs.reduce((a, b) => a + b, 0);
+  const sumY = ys.reduce((a, b) => a + b, 0);
+  const sumXY = xs.reduce((a, x, i) => a + x * ys[i], 0);
+  const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  const yMean = sumY / n;
+  const ssTot = ys.reduce((a, y) => a + (y - yMean) ** 2, 0);
+  const ssRes = ys.reduce((a, y, i) => a + (y - (slope * xs[i] + intercept)) ** 2, 0);
+  const r2 = 1 - ssRes / ssTot;
+  const r = Math.sqrt(r2) * (slope < 0 ? -1 : 1);
+  return { slope, intercept, r2, r };
+}
+
 // ─── 더미 데이터 (FastAPI 연결 후 교체) ──────────────────────────────────────
 
 type PriceHistory = { date: string; price: number; regularPrice: number; discount: number };
@@ -395,6 +436,92 @@ function LanguageSupport({ langs }: { langs: LangSupport[] }) {
   );
 }
 
+// ─── 6. 출시연도 ↔ 할인 빈도 상관관계 차트 ──────────────────────────────────
+function CorrelationChart({ data }: { data: YearlyDiscount[] }) {
+  const { slope, intercept, r2, r } = calcRegression(data);
+  const maxFreq = Math.max(...data.map((d) => d.avgFrequency));
+  const chartH = 140;
+  const chartW = 100;
+  const barWidth = chartW / data.length - 1;
+  const toSvgY = (freq: number) => chartH - (freq / maxFreq) * chartH * 0.88 - 6;
+  const regSvgY1 = toSvgY(slope * data[0].year + intercept);
+  const regSvgY2 = toSvgY(slope * data[data.length - 1].year + intercept);
+
+  const interpretation = r < -0.7
+    ? "강한 음의 상관관계 — 출시가 오래될수록 할인 빈도가 높아집니다"
+    : r < -0.4
+    ? "중간 음의 상관관계 — 출시 연도와 할인 빈도가 반비례하는 경향이 있습니다"
+    : "약한 상관관계";
+
+  return (
+    <div className="panel-soft p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-white">출시연도 ↔ 할인 빈도 상관관계</div>
+        <div className="flex gap-2 flex-wrap">
+          <span className="rounded-full bg-[#c084fc]/15 px-2 py-0.5 text-xs text-[#c084fc] whitespace-nowrap">
+            r = {r.toFixed(3)}
+          </span>
+          <span className="rounded-full bg-[#64ffc8]/15 px-2 py-0.5 text-xs text-emerald-400 whitespace-nowrap">
+            R² = {r2.toFixed(3)}
+          </span>
+        </div>
+      </div>
+
+      {/* SVG 바 차트 + 회귀선 */}
+      <div className="relative mb-3">
+        <svg viewBox={`0 0 100 ${chartH}`} className="w-full" style={{ height: 160 }} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#9b5cff" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#ff70ea" stopOpacity="0.5" />
+            </linearGradient>
+          </defs>
+          {data.map((d, i) => {
+            const x = i * (chartW / data.length);
+            const barH = (d.avgFrequency / maxFreq) * chartH * 0.88;
+            const y = chartH - barH;
+            return (
+              <rect key={d.year} x={x + 0.3} y={y} width={barWidth} height={barH}
+                fill="url(#barGrad)" rx="0.5" opacity="0.85" />
+            );
+          })}
+          <line x1={0} y1={regSvgY1} x2={chartW} y2={regSvgY2}
+            stroke="#64ffc8" strokeWidth="1.2" strokeDasharray="3 2"
+            vectorEffect="non-scaling-stroke" />
+        </svg>
+        <div className="flex justify-between mt-1">
+          {data.filter((_, i) => i % 3 === 0).map((d) => (
+            <span key={d.year} className="text-[9px] text-white/30">{d.year}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* 데이터 테이블 */}
+      <div className="mb-4 max-h-36 overflow-y-auto space-y-1">
+        {data.map((d) => (
+          <div key={d.year} className="flex items-center gap-2 text-xs">
+            <span className="w-10 shrink-0 text-white/50">{d.year}년</span>
+            <div className="flex-1 h-2 rounded-full bg-white/8">
+              <div className="h-2 rounded-full bg-gradient-to-r from-[#9b5cff] to-[#ff70ea]"
+                style={{ width: `${(d.avgFrequency / maxFreq) * 100}%` }} />
+            </div>
+            <span className="w-10 shrink-0 text-right text-[#c084fc]">{d.avgFrequency}%</span>
+            <span className="w-14 shrink-0 text-right text-white/30">{d.gameCount.toLocaleString()}개</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 해석 */}
+      <div className="rounded-xl border border-[#c084fc]/20 bg-[#c084fc]/8 p-3 text-xs text-[#e9d5ff]">
+        📊 {interpretation}
+      </div>
+      <div className="mt-2 text-[10px] text-white/30">
+        * 더미 데이터 — FastAPI 연결 후 <code className="text-white/40">/api/insight/discount-frequency</code> 로 교체
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ───────────────────────────────────────────────────────────
 export default function InsightPageClient() {
   const [selectedId, setSelectedId] = useState<number>(games[0].steamAppId);
@@ -509,6 +636,11 @@ export default function InsightPageClient() {
 
         {/* 5. 언어 지원 현황 */}
         <LanguageSupport langs={langs} />
+
+        {/* 6. 출시연도 ↔ 할인 빈도 상관관계 — 넓게 */}
+        <div className="md:col-span-2">
+          <CorrelationChart data={DUMMY_YEARLY_DISCOUNT} />
+        </div>
       </div>
 
       {/* DB 연결 안내 */}
@@ -516,7 +648,8 @@ export default function InsightPageClient() {
         현재 더미 데이터입니다. FastAPI 연결 후{' '}
         <code className="text-white/50">game_price_history</code>,{' '}
         <code className="text-white/50">game_reviews</code>,{' '}
-        <code className="text-white/50">game_languages</code> 테이블을 API fetch로 교체하세요.
+        <code className="text-white/50">game_languages</code>,{' '}
+        <code className="text-white/50">/api/insight/discount-frequency</code> 를 API fetch로 교체하세요.
       </div>
     </div>
   );

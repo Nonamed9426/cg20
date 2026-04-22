@@ -1,8 +1,6 @@
 {
-  "/page": "app/page.js",
+  "/insight/page": "app/insight/page.js",
+  "/active/page": "app/active/page.js",
   "/games/[id]/page": "app/games/[id]/page.js",
-  "/rankings/page": "app/rankings/page.js",
-  "/sales/page": "app/sales/page.js",
-  "/predict/[id]/page": "app/predict/[id]/page.js",
-  "/insight/page": "app/insight/page.js"
+  "/predict/[id]/page": "app/predict/[id]/page.js"
 }

@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/insight/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/insight/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,35 +11,20 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
+    "/active/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/active/page.js"
+    ],
     "/games/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/games/[id]/page.js"
     ],
-    "/rankings/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/rankings/page.js"
-    ],
     "/predict/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/predict/[id]/page.js"
-    ],
-    "/sales/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/sales/page.js"
-    ],
-    "/recommend/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/recommend/page.js"
-    ],
-    "/insight/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/insight/page.js"
     ]
   }
 }
