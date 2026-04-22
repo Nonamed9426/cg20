@@ -325,6 +325,21 @@ export function getGameById(steamAppId: number) {
   return games.find((game) => game.steamAppId === steamAppId) ?? games[0];
 }
 
+export function resolveGame(identifier: string | number) {
+  if (typeof identifier === 'number') {
+    return getGameById(identifier);
+  }
+
+  const normalized = String(identifier).trim();
+  const parsedId = Number(normalized);
+
+  if (!Number.isNaN(parsedId) && normalized === String(parsedId)) {
+    return getGameById(parsedId);
+  }
+
+  return games.find((game) => game.slug === normalized) ?? games[0];
+}
+
 export function getDailyRecommendedGame(date = new Date()) {
   const start = new Date(date.getFullYear(), 0, 0);
   const diff = date.getTime() - start.getTime();

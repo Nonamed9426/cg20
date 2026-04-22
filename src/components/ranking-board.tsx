@@ -9,7 +9,7 @@ import { StreamerBoard } from '@/components/streamer-board';
 const tabs = [
   { key: 'localTop', label: '국내 top100' },
   { key: 'globalTop', label: '미국 top100' },
-  { key: 'streamerTop', label: '스트리머 top100' },
+  { key: 'streamerTop', label: '스트리머 top10' },
   { key: 'bestWorst', label: 'best/worst top100' },
   { key: 'genreTop', label: '장르별 top100' },
 ] as const;
@@ -76,12 +76,20 @@ export function RankingBoard() {
 
   return (
     <section className="panel p-5 md:p-6">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-lg font-semibold">게임 순위</div>
           <div className="mt-1 text-sm text-white/50">
-            대한민국은 실구매 선호, 미국은 글로벌 화제성, 스트리머는 방송 노출을 반영한 더미 데이터입니다.
+            대한민국은 실구매 선호, 미국은 글로벌 화제성, 스트리머는 치지직/Twitch Top 10 기준 더미 데이터입니다.
           </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <Link href="/active" className="rounded-xl border border-[#8d60ff]/30 bg-[#2a1452] px-4 py-2 font-semibold text-white/90 transition hover:border-[#b28cff] hover:text-white">
+            활성 게임 추천
+          </Link>
+          <Link href="/recommend" className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 font-semibold text-white/75 transition hover:border-white/20 hover:text-white">
+            추천 받기
+          </Link>
         </div>
       </div>
 

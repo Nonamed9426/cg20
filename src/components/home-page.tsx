@@ -143,10 +143,13 @@ export function HomePage() {
 
           <section className="panel p-5">
             <div className="text-xl font-black text-white md:text-2xl">빠른 이동</div>
-            <div className="mt-2 text-sm text-white/55 md:text-base">섹션별 Top Ranking 이동 버튼</div>
+            <div className="mt-2 text-sm text-white/55 md:text-base">순위, 스트리머, 활성 게임 추천으로 바로 이동</div>
             <div className="mt-5 space-y-3 text-sm">
+              <Link href="/active" className="block rounded-2xl border border-[#8d60ff]/30 bg-[#2a1452] px-5 py-4 font-semibold text-white/95 transition hover:border-[#b28cff] hover:bg-[#331764]">
+                활성 게임 추천 바로 보기
+              </Link>
               <Link href="/rankings?tab=streamerTop" className="block rounded-2xl bg-white/[0.05] px-5 py-4 font-semibold text-white/90 transition hover:bg-white/[0.09]">
-                스트리밍 인기 Top 100
+                스트리밍 인기 Top 10
               </Link>
               <Link href="/rankings?tab=localTop" className="block rounded-2xl bg-white/[0.05] px-5 py-4 font-semibold text-white/90 transition hover:bg-white/[0.09]">
                 최고 평점 Top 100

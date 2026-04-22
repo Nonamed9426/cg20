@@ -9,7 +9,7 @@ import { Logo } from './logo';
 const items = [
   { href: '/', label: '추천' },
   { href: '/predict/stardew-valley', label: '할인 예측' },
-  { href: '/games/stardew-valley', label: '게임 상세' },
+  { href: '/games/413150', label: '게임 상세' },
   { href: '/rankings', label: '게임 순위' },
   { href: '/sales', label: '세일 일정' },
   { href: '/active', label: '활성 게임' },

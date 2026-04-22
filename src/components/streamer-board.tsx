@@ -274,7 +274,7 @@ export function StreamerBoard() {
       <div className="mb-5">
         <div className="text-lg font-semibold">스트리밍 인기 게임</div>
         <div className="mt-1 text-sm text-white/50">
-          치지직(한국) · Twitch(글로벌) 기준 — 어떤 게임이 가장 많이 방송되고, 시청자를 가장 많이 모으는지 확인합니다.
+          치지직(한국) · Twitch(글로벌) 기준 Top 10만 표시합니다. 현재 데이터 범위에 맞춰 플랫폼별 핵심 순위만 보여줍니다.
         </div>
       </div>
 
