@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom';
+'use client';
+
+import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Game, getSteamHeader, getSteamStoreUrl, statPanels } from '@/lib/data';
@@ -560,7 +562,7 @@ export function DetailPage({
             <span className="text-xs text-white/50">태그 기반</span>
           </div>
           <div className="space-y-4">
-            {related.map((item) => <GameCard key={item.steamAppId} game={item} compact />)}
+            {(related ?? []).map((item) => <GameCard key={item.steamAppId} game={item} compact />)}
           </div>
         </section>
 
