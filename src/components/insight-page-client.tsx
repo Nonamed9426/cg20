@@ -578,27 +578,23 @@ export default function InsightPageClient() {
       </div>
 
       {/* ── ① ② 전역 인사이트 ── */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="relative z-0 grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2"><GenreHeatmap /></div>
         <div className="md:col-span-2"><ReleaseDiscountScatter /></div>
       </div>
 
       {/* ── ③ 가짜 할인 순위 ── */}
-      <FakeDiscountRanking />
+      <div className="relative z-0"><FakeDiscountRanking /></div>
 
       {/* ── 게임 선택 (④ ⑤) ── */}
-      <div className="panel p-5">
+      <div className="panel p-5 relative z-10">
         <div className="mb-1 text-sm font-semibold text-white">게임별 인사이트</div>
         <div className="mb-3 text-xs text-white/40">④ 국가별 가격 비교, ⑤ 리뷰 감성분석은 게임별로 확인할 수 있어요</div>
-        <div className="relative">
+        <div className="relative z-10">
           <div
             className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-[#1a1033] p-3 transition hover:border-[#c084fc]/50"
             onClick={() => setDropdownOpen(!dropdownOpen)}
           >
-            {selectedGame && (
-              <img src={getSteamHeader(selectedGame.gameId)} alt={selectedGame.name}
-                className="h-10 w-16 rounded-lg object-cover" />
-            )}
             <div className="flex-1">
               <div className="text-sm font-semibold text-white">{selectedGame?.name ?? '게임 선택 중...'}</div>
               <div className="text-xs text-white/45">{selectedGame?.genres.join(' · ') ?? ''}</div>
@@ -624,7 +620,6 @@ export default function InsightPageClient() {
                     className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition hover:bg-white/5 ${selectedId === g.gameId ? 'bg-[#c084fc]/10' : ''}`}
                     onClick={() => { setSelectedId(g.gameId); setDropdownOpen(false); setSearchQuery(''); }}
                   >
-                    <img src={getSteamHeader(g.gameId)} alt={g.name} className="h-8 w-12 rounded object-cover" />
                     <div>
                       <div className="text-sm text-white">{g.name}</div>
                       <div className="text-xs text-white/40">{g.genres.join(' · ')}</div>
