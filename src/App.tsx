@@ -6,7 +6,6 @@ import InsightPageClient from '@/components/insight-page-client';
 import { PredictPage } from '@/components/predict-page';
 import { RankingBoard } from '@/components/ranking-board';
 import { RecommendPageClient } from '@/components/recommend-page-client';
-import { SalePredictPage } from '@/components/sale-predict-page';
 import { SearchPageClient } from '@/components/search-page-client';
 import { RouterProvider, matchPath, useRouterContext } from '@/compat/router';
 import { games, resolveGame } from '@/lib/data';
@@ -24,8 +23,7 @@ function RoutedPage() {
   const predictParams = matchPath('/predict/:id', pathname);
   if (predictParams) {
     const game = resolveGame(predictParams.id);
-    const related = games.filter((item) => item.slug !== game.slug).slice(0, 3);
-    return <AppShell><PredictPage game={game} related={related} /></AppShell>;
+    return <AppShell><PredictPage game={game} /></AppShell>;
   }
 
   switch (pathname) {
@@ -37,8 +35,6 @@ function RoutedPage() {
       return <AppShell><RankingBoard /></AppShell>;
     case '/recommend':
       return <AppShell><RecommendPageClient /></AppShell>;
-    case '/sales':
-      return <AppShell><SalePredictPage /></AppShell>;
     case '/insight':
       return <AppShell><InsightPageClient /></AppShell>;
     case '/search':

@@ -238,7 +238,7 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
                 <div className="mt-2 text-sm text-white/70">{game.reviewLabel} · {game.score}점</div>
                 <div className="mt-4 flex gap-2">
                   <a href={getSteamStoreUrl(game.steamAppId)} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">지금 구매</a>
-                  <Link href={`/predict/${game.steamAppId}`} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
+                  <Link href={`/predict/${game.steamAppId}`} target="_blank" rel="noreferrer" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
                 </div>
                 <div className="mt-4 space-y-2 text-xs text-white/55">
                   <div>플랫폼: {game.platforms.join(', ')}</div>
