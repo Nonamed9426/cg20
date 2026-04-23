@@ -56,71 +56,67 @@ export function HomePage() {
       {/* ── 상단: 오늘의 추천 + 환율/빠른이동 ── */}
       <div className="grid gap-6 lg:grid-cols-[1.38fr_0.88fr]">
         <section className="panel overflow-hidden p-5 md:p-6">
-          <div className="mb-3 flex items-center justify-between text-xs text-white/50">
+          {/* ── URL 옆으로 꽉 채우는 상단 바 ── */}
+          <div className="mb-4 flex items-center justify-between text-xs text-white/50">
             <span>Today&apos;s one-pick Steam recommendation</span>
             <span>{new Date().toLocaleDateString('ko-KR')}</span>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1.35fr_0.78fr]">
-            <div>
-              <img
-                src={getSteamHeader(game.steamAppId)}
-                alt={game.title}
-                className="h-[260px] w-full rounded-[22px] object-cover shadow-neon"
-              />
-              <div className="mt-4 flex flex-wrap gap-2">
-                {game.tags.map((tag) => (
-                  <span key={tag} className="pill">{tag}</span>
-                ))}
-              </div>
-              <div className="mt-4 panel-soft p-4">
-                <div className="mb-3 flex items-center gap-3 border-b border-white/8 pb-3 text-sm text-white/65">
-                  <span className="text-white">게임 소개</span>
-                  <span>추천 이유</span>
-                  <span>시즌 구매 타이밍</span>
-                </div>
-                <p className="text-sm leading-6 text-white/72">{game.summary}</p>
-              </div>
+          <div className="space-y-4">
+          {/* ── 1계층: 이미지 + 태그 (가로 꽉 채움, 짤리지 않게) ── */}
+          <div className="relative w-full overflow-hidden rounded-[22px] bg-[#1a0d39]">
+            <img
+              src={getSteamHeader(game.steamAppId)}
+              alt={game.title}
+              className="w-full object-contain shadow-neon"
+              style={{ maxHeight: '280px', minHeight: '160px' }}
+            />
+            <div className="absolute bottom-3 left-4 flex flex-wrap gap-2">
+              {game.tags.map((tag) => (
+                <span key={tag} className="pill">{tag}</span>
+              ))}
             </div>
+          </div>
 
-            <div className="space-y-4">
-              <div className="rounded-[24px] border border-line/60 bg-[#241047] p-5 shadow-glow">
-                <div className="flex items-center justify-between">
-                  <div className="rounded-full bg-[#1cff8e1a] px-3 py-1 text-lg font-semibold text-[#72f7bb]">
-                    -{game.discountRate}%
-                  </div>
-                  <div className="text-sm text-white/70">{game.reviewLabel}</div>
-                </div>
+          {/* ── 2계층: 추천 이유 (가로 꽉 채움) ── */}
+          <div className="panel-soft p-4">
+            <div className="mb-2 border-b border-white/8 pb-2 text-sm font-semibold text-white">추천 이유</div>
+            <p className="text-sm leading-6 text-white/72">{game.summary}</p>
+          </div>
 
-                {/* 반응형 폰트: 모바일 작게, 데스크탑 크게 */}
-                <div className="mt-4 text-2xl font-black tracking-tight text-white md:text-4xl lg:text-5xl">
-                  {game.title}
-                </div>
-                <p className="mt-3 text-sm leading-7 text-white/74">
+          {/* ── 3계층: 할인/가격/버튼 (가로 꽉 채움) ── */}
+          <div className="rounded-[24px] border border-line/60 bg-[#241047] p-5 shadow-glow">
+            <div className="flex items-center justify-between">
+              <div className="rounded-full bg-[#1cff8e1a] px-3 py-1 text-lg font-semibold text-[#72f7bb]">
+                -{game.discountRate}%
+              </div>
+              <div className="text-sm text-white/70">{game.reviewLabel}</div>
+            </div>
+            <div className="mt-3 flex items-end justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-xl font-black tracking-tight text-white md:text-2xl">{game.title}</div>
+                <p className="mt-1 text-xs leading-5 text-white/60">
                   {game.reason.join(', ')} 흐름을 종합해 추천한 오늘의 1픽입니다.
                 </p>
-
-                <div className="mt-5 rounded-[20px] bg-white/[0.05] p-4">
-                  <div className="text-sm text-white/50">현재 가격</div>
-                  <div className="mt-2 text-2xl font-black text-mint">{game.prices.kr}</div>
-                  <div className="mt-1 text-sm text-white/35 line-through">₩{game.originalKRW.toLocaleString()}</div>
-                </div>
-
-                <div className="mt-5 flex gap-3">
-                  <Link href={`/games/${game.steamAppId}`} className="flex-1 rounded-xl bg-[#3fd09d] px-4 py-4 text-center text-base font-bold text-[#120821] md:text-lg">
-                    상세 보기
-                  </Link>
-                  <Link href={`/predict/${game.steamAppId}`} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center text-base font-bold text-white md:text-lg">
-                    할인 예측 보기
-                  </Link>
-                </div>
-
-                <div className="mt-5 space-y-2 text-sm text-white/60">
-                  <div>오늘의 추천은 날짜 기준으로 하루 1개씩 자동으로 바뀝니다.</div>
-                  <div>유저 평점, 할인율, 업데이트 흐름, 플레이타임을 함께 반영했습니다.</div>
-                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-xl font-black text-mint">{game.prices.kr}</div>
+                <div className="text-xs text-white/35 line-through">₩{game.originalKRW.toLocaleString()}</div>
               </div>
             </div>
+            <div className="mt-4 flex gap-3">
+              <Link href={`/games/${game.steamAppId}`} className="flex-1 rounded-xl bg-[#3fd09d] px-4 py-3 text-center text-sm font-bold text-[#120821]">
+                상세 보기
+              </Link>
+              <Link href={`/predict/${game.steamAppId}`} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-sm font-bold text-white">
+                할인 예측 보기
+              </Link>
+            </div>
+            <div className="mt-3 space-y-1 text-xs text-white/45">
+              <div>오늘의 추천은 날짜 기준으로 하루 1개씩 자동으로 바뀝니다.</div>
+              <div>유저 평점, 할인율, 업데이트 흐름, 플레이타임을 함께 반영했습니다.</div>
+            </div>
+          </div>
           </div>
         </section>
 
@@ -205,8 +201,8 @@ export function HomePage() {
           </section>
         </div>
 
-        {/* aside도 items-start로 맞춰서 빈칸 방지 */}
-        <aside className="space-y-6 lg:sticky lg:top-6">
+        {/* aside — sticky 제거해서 왼쪽과 높이 자연스럽게 맞춤 */}
+        <aside className="space-y-6">
           <section className="panel p-5">
             <div className="text-sm font-semibold text-[#f0b5ff]">환율 비교 추천</div>
             <div className="mt-1 text-2xl font-black tracking-tight text-white md:text-[36px]">국가별 구매 비교</div>
@@ -239,14 +235,14 @@ export function HomePage() {
             </div>
           </section>
 
+          {/* 할인 뉴스 — 3개만 표시 */}
           <section className="panel p-5">
             <div className="text-2xl font-black tracking-tight text-white md:text-[36px]">할인 뉴스</div>
             <div className="mt-1 text-base text-white/58">게임 언론/프로모션 카드 UI</div>
             <div className="mt-5 space-y-4">
-              {saleNews.map((item) => (
+              {saleNews.slice(0, 3).map((item) => (
                 <div key={item.title} className="rounded-[22px] border border-white/6 bg-white/[0.03] p-4">
                   <div className="mb-2 flex items-start justify-between gap-3">
-                    {/* 제목 줄바꿈 방지 — line-clamp-2로 최대 2줄 */}
                     <div className="min-w-0 text-base font-bold leading-snug text-white line-clamp-2">
                       {item.title}
                     </div>

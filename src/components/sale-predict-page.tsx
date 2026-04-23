@@ -1,517 +1,448 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
-import { games, getSteamHeader } from '@/lib/data';
+import { useState, useMemo, useEffect } from 'react';
+import { games, getSteamHeader, exchangeRates } from '@/lib/data';
 
-// ─────────────────────────────────────────────
-// 타입
-// ─────────────────────────────────────────────
-type SaleEvent = {
-  name: string;
-  period: string;          // 예상 기간 텍스트
-  startDate: string;       // YYYY-MM-DD
-  endDate: string;
-  daysUntil: number;       // 오늘 기준 D-day
-  avgDiscount: number;     // 평균 할인율 %
-  confidence: 'high' | 'medium' | 'low';
-  description: string;
-  tags: string[];
+const API_BASE = 'http://localhost:8000';
+
+// ═══════════════════════════════════════════════════════
+//  타입
+// ═══════════════════════════════════════════════════════
+type PredictionData = {
+  gameId: number;
+  isOnSale: boolean;
+  currentDiscount: number;
+  currentPrice: number;
+  regularPrice: number;
+  avgCycleDays: number | null;
+  lastSaleDate: string | null;
+  nextPredictedDate: string | null;
+  history: { date: string; discount: number; price: number }[];
 };
 
-type GameSalePrediction = {
-  slug: string;
-  lastSaleDate: string;    // 마지막 할인일
-  lastDiscountRate: number;
-  avgCycleDays: number;    // 평균 할인 주기 (일)
-  nextPredictedDate: string;
-  nextDaysUntil: number;
-  expectedDiscount: number;
-  confidence: 'high' | 'medium' | 'low';
-  saleTrend: 'frequent' | 'occasional' | 'rare'; // 할인 빈도
-};
-
-// ─────────────────────────────────────────────
-// 더미 데이터 — DB/크롤링 연결 시 교체
-// ─────────────────────────────────────────────
-const SALE_EVENTS: SaleEvent[] = [
-  {
-    name: '스팀 봄 세일',
-    period: '2026년 3월 중순 ~ 4월 초',
-    startDate: '2026-03-19',
-    endDate: '2026-03-26',
-    daysUntil: -25,  // 이미 지남
-    avgDiscount: 50,
-    confidence: 'high',
-    description: '매년 3~4월에 진행되는 봄 프로모션. 인디 및 AAA 타이틀 대부분 포함.',
-    tags: ['인디 강세', 'AAA 포함', '번들 할인'],
-  },
-  {
-    name: '스팀 여름 세일',
-    period: '2026년 6월 말 ~ 7월 중순 예상',
-    startDate: '2026-06-26',
-    endDate: '2026-07-10',
-    daysUntil: 66,
-    avgDiscount: 75,
-    confidence: 'high',
-    description: '연간 최대 규모 세일. 대부분의 게임이 역대 최저가를 기록하는 시기.',
-    tags: ['역대 최저가', '최대 규모', '위시리스트 필수'],
-  },
-  {
-    name: '스팀 할로윈 세일',
-    period: '2026년 10월 말 예상',
-    startDate: '2026-10-28',
-    endDate: '2026-11-01',
-    daysUntil: 190,
-    avgDiscount: 40,
-    confidence: 'medium',
-    description: '공포/서바이벌 장르 위주로 할인. 기간이 짧아 빠른 결정이 필요.',
-    tags: ['공포 장르', '단기 세일', '서바이벌'],
-  },
-  {
-    name: '스팀 추수감사절 세일',
-    period: '2026년 11월 말 예상',
-    startDate: '2026-11-25',
-    endDate: '2026-12-02',
-    daysUntil: 218,
-    avgDiscount: 60,
-    confidence: 'high',
-    description: '블랙프라이데이와 연계. AAA 신작 포함 여부에 따라 할인폭이 달라짐.',
-    tags: ['블랙프라이데이', 'AAA 신작', '대형 세일'],
-  },
-  {
-    name: '스팀 겨울 세일',
-    period: '2026년 12월 말 ~ 1월 초 예상',
-    startDate: '2026-12-22',
-    endDate: '2027-01-05',
-    daysUntil: 245,
-    avgDiscount: 70,
-    confidence: 'high',
-    description: '연말 최대 할인 이벤트. 여름 세일과 함께 연간 2대 세일 중 하나.',
-    tags: ['연말 결산', '역대 최저가', '기프트 시즌'],
-  },
-  {
-    name: '스팀 개발자/퍼블리셔 세일',
-    period: '수시 진행 (월 2~4회)',
-    startDate: '2026-05-01',
-    endDate: '2026-05-07',
-    daysUntil: 10,
-    avgDiscount: 35,
-    confidence: 'low',
-    description: '특정 개발사/퍼블리셔 단위로 진행. 캡콤, EA, 소니 등이 자주 참여.',
-    tags: ['퍼블리셔별', '수시 진행', '예측 어려움'],
-  },
+// ═══════════════════════════════════════════════════════
+//  스팀 정기 세일 타임라인 더미
+// ═══════════════════════════════════════════════════════
+const SALE_EVENTS = [
+  { name: '봄 세일',      month: 3,  daysUntil: -25, confidence: 'high'   as const },
+  { name: '여름 세일',    month: 6,  daysUntil: 66,  confidence: 'high'   as const },
+  { name: '할로윈 세일',  month: 10, daysUntil: 190, confidence: 'medium' as const },
+  { name: '추수감사절',   month: 11, daysUntil: 218, confidence: 'high'   as const },
+  { name: '겨울 세일',    month: 12, daysUntil: 245, confidence: 'high'   as const },
 ];
 
-const GAME_PREDICTIONS: GameSalePrediction[] = [
-  {
-    slug: 'monster-hunter-world',
-    lastSaleDate: '2026-03-15',
-    lastDiscountRate: 50,
-    avgCycleDays: 42,
-    nextPredictedDate: '2026-04-26',
-    nextDaysUntil: 5,
-    expectedDiscount: 50,
-    confidence: 'high',
-    saleTrend: 'frequent',
-  },
-  {
-    slug: 'stardew-valley',
-    lastSaleDate: '2026-03-19',
-    lastDiscountRate: 40,
-    avgCycleDays: 55,
-    nextPredictedDate: '2026-05-13',
-    nextDaysUntil: 22,
-    expectedDiscount: 40,
-    confidence: 'high',
-    saleTrend: 'frequent',
-  },
-  {
-    slug: 'helldivers-2',
-    lastSaleDate: '2026-02-20',
-    lastDiscountRate: 20,
-    avgCycleDays: 60,
-    nextPredictedDate: '2026-05-21',
-    nextDaysUntil: 30,
-    expectedDiscount: 25,
-    confidence: 'medium',
-    saleTrend: 'occasional',
-  },
-  {
-    slug: 'elden-ring',
-    lastSaleDate: '2026-01-10',
-    lastDiscountRate: 10,
-    avgCycleDays: 90,
-    nextPredictedDate: '2026-06-26',
-    nextDaysUntil: 66,
-    expectedDiscount: 20,
-    confidence: 'medium',
-    saleTrend: 'occasional',
-  },
-  {
-    slug: 'ea-fc-24',
-    lastSaleDate: '2026-04-01',
-    lastDiscountRate: 70,
-    avgCycleDays: 30,
-    nextPredictedDate: '2026-05-01',
-    nextDaysUntil: 10,
-    expectedDiscount: 70,
-    confidence: 'high',
-    saleTrend: 'frequent',
-  },
-  {
-    slug: 'dark-and-darker',
-    lastSaleDate: '2026-02-01',
-    lastDiscountRate: 20,
-    avgCycleDays: 120,
-    nextPredictedDate: '2026-07-15',
-    nextDaysUntil: 85,
-    expectedDiscount: 20,
-    confidence: 'low',
-    saleTrend: 'rare',
-  },
-  {
-    slug: 'spiritfarer',
-    lastSaleDate: '2026-03-19',
-    lastDiscountRate: 75,
-    avgCycleDays: 45,
-    nextPredictedDate: '2026-05-03',
-    nextDaysUntil: 12,
-    expectedDiscount: 75,
-    confidence: 'high',
-    saleTrend: 'frequent',
-  },
-  {
-    slug: 'sun-haven',
-    lastSaleDate: '2026-03-10',
-    lastDiscountRate: 20,
-    avgCycleDays: 50,
-    nextPredictedDate: '2026-05-29',
-    nextDaysUntil: 38,
-    expectedDiscount: 25,
-    confidence: 'medium',
-    saleTrend: 'occasional',
-  },
-];
-
-// ─────────────────────────────────────────────
-// 유틸
-// ─────────────────────────────────────────────
-function confidenceLabel(c: 'high' | 'medium' | 'low') {
-  if (c === 'high') return { text: '예측 신뢰도 높음', cls: 'bg-[#1a3d2b] text-[#3fd09d]' };
-  if (c === 'medium') return { text: '예측 신뢰도 보통', cls: 'bg-[#3d330a] text-[#f0c040]' };
-  return { text: '예측 신뢰도 낮음', cls: 'bg-[#3d1a22] text-[#ff7eb3]' };
-}
-
-function trendLabel(t: GameSalePrediction['saleTrend']) {
-  if (t === 'frequent') return { text: '자주 할인', cls: 'text-[#3fd09d]' };
-  if (t === 'occasional') return { text: '간헐적 할인', cls: 'text-[#f0c040]' };
-  return { text: '할인 드묾', cls: 'text-[#ff7eb3]' };
-}
-
-function ddayText(days: number) {
-  if (days < 0) return `${Math.abs(days)}일 전 종료`;
-  if (days === 0) return 'D-day';
-  return `D-${days}`;
-}
+// ═══════════════════════════════════════════════════════
+//  유틸
+// ═══════════════════════════════════════════════════════
+function formatKRW(n: number) { return `₩${n.toLocaleString()}`; }
 
 function ddayColor(days: number) {
-  if (days < 0) return 'text-white/30';
-  if (days <= 7) return 'text-[#3fd09d]';
-  if (days <= 30) return 'text-[#f0c040]';
+  if (days <= 7)  return 'text-emerald-400';
+  if (days <= 30) return 'text-amber-400';
   return 'text-white/60';
 }
 
-// ─────────────────────────────────────────────
-// 세일 이벤트 카드
-// ─────────────────────────────────────────────
-function SaleEventCard({ event }: { event: SaleEvent }) {
-  const conf = confidenceLabel(event.confidence);
-  const isPast = event.daysUntil < 0;
-  const isClose = event.daysUntil >= 0 && event.daysUntil <= 14;
+function ddayText(days: number) {
+  if (days === 0) return 'D-day';
+  if (days < 0)   return `${Math.abs(days)}일 전`;
+  return `D-${days}`;
+}
+
+// 날짜 → 캘린더용 Date 객체
+function parseDate(str: string): Date {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// ═══════════════════════════════════════════════════════
+//  할인 예측 캘린더
+// ═══════════════════════════════════════════════════════
+function DiscountCalendar({ prediction }: { prediction: PredictionData | null }) {
+  const today = new Date();
+  const [viewYear, setViewYear]   = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth()); // 0-indexed
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  // 할인 이력 날짜 set
+  const historyDates = useMemo(() => {
+    if (!prediction) return new Set<string>();
+    return new Set(prediction.history.map((h) => h.date));
+  }, [prediction]);
+
+  // 다음 예측 날짜
+  const predictedDate = prediction?.nextPredictedDate
+    ? parseDate(prediction.nextPredictedDate)
+    : null;
+
+  function cellType(day: number): 'today' | 'predicted' | 'history' | 'normal' {
+    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isToday  = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
+    const isPred   = predictedDate && predictedDate.getFullYear() === viewYear && predictedDate.getMonth() === viewMonth && predictedDate.getDate() === day;
+    if (isToday)  return 'today';
+    if (isPred)   return 'predicted';
+    if (historyDates.has(dateStr)) return 'history';
+    return 'normal';
+  }
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
 
   return (
-    <div className={`rounded-2xl border p-4 transition ${
-      isPast
-        ? 'border-white/5 bg-white/[0.02] opacity-50'
-        : isClose
-        ? 'border-[#9b5cff]/50 bg-[#1e0f3f]'
-        : 'border-white/8 bg-white/[0.03]'
-    }`}>
-      {/* 상단 */}
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            {isClose && !isPast && (
-              <span className="rounded-full bg-[#9b5cff]/20 px-2 py-0.5 text-[10px] font-bold text-[#c49fff]">
-                임박
-              </span>
-            )}
-            <span className="text-sm font-bold text-white">{event.name}</span>
-          </div>
-          <div className="mt-1 text-xs text-white/45">{event.period}</div>
+    <div className="panel-soft p-4">
+      {/* 헤더 */}
+      <div className="mb-3 flex items-center justify-between">
+        <button onClick={prevMonth} className="rounded-lg px-2 py-1 text-white/50 hover:text-white transition">‹</button>
+        <div className="text-sm font-semibold text-white">
+          {viewYear}년 {viewMonth + 1}월
         </div>
-        <div className={`text-right text-lg font-black ${ddayColor(event.daysUntil)}`}>
-          {ddayText(event.daysUntil)}
-        </div>
+        <button onClick={nextMonth} className="rounded-lg px-2 py-1 text-white/50 hover:text-white transition">›</button>
       </div>
 
-      {/* 평균 할인율 바 */}
-      <div className="mb-3">
-        <div className="mb-1 flex justify-between text-[10px] text-white/40">
-          <span>평균 할인율</span>
-          <span className="font-semibold text-white/70">최대 -{event.avgDiscount}%</span>
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            style={{ width: `${event.avgDiscount}%` }}
-            className={`h-full rounded-full transition-all duration-700 ${
-              isPast ? 'bg-white/20' : 'bg-gradient-to-r from-[#9b5cff] to-[#ff70ea]'
-            }`}
-          />
-        </div>
+      {/* 요일 헤더 */}
+      <div className="mb-1 grid grid-cols-7 text-center text-[10px] text-white/30">
+        {['일','월','화','수','목','금','토'].map(d => <div key={d}>{d}</div>)}
       </div>
 
-      {/* 설명 */}
-      <p className="mb-3 text-xs leading-5 text-white/55">{event.description}</p>
+      {/* 날짜 그리드 */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day  = i + 1;
+          const type = cellType(day);
+          return (
+            <div key={day} className={`flex h-8 items-center justify-center rounded-lg text-xs font-semibold transition ${
+              type === 'today'     ? 'bg-[#6e35dc] text-white'        :
+              type === 'predicted' ? 'bg-amber-500/80 text-white ring-2 ring-amber-400' :
+              type === 'history'   ? 'bg-emerald-500/20 text-emerald-300' :
+              'text-white/50 hover:bg-white/5'
+            }`}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
 
-      {/* 태그 + 신뢰도 */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conf.cls}`}>
-          {conf.text}
-        </span>
-        {event.tags.map((tag) => (
-          <span key={tag} className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/45">
-            {tag}
-          </span>
-        ))}
+      {/* 범례 */}
+      <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-white/40">
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-[#6e35dc]" />오늘</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />예측 할인일</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-400/50" />과거 할인</span>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// 게임별 할인 예측 행
-// ─────────────────────────────────────────────
-function GamePredictionRow({ pred, rank }: { pred: GameSalePrediction; rank: number }) {
-  const game = games.find((g) => g.slug === pred.slug) ?? games[0];
-  const conf = confidenceLabel(pred.confidence);
-  const trend = trendLabel(pred.saleTrend);
-
-  return (
-    <Link
-      href={`/predict/${pred.slug}`}
-      className="grid grid-cols-[36px_100px_1fr_80px_80px_100px] items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3 transition hover:border-accent/70"
-    >
-      {/* 순위 */}
-      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[#6e35dc] text-sm font-bold">
-        {rank}
-      </div>
-
-      {/* 썸네일 */}
-      <img
-        src={getSteamHeader(game.steamAppId)}
-        alt={game.title}
-        className="h-14 w-full flex-shrink-0 rounded-lg object-cover"
-      />
-
-      {/* 게임 정보 */}
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold">{game.title}</div>
-        <div className="mt-1 flex items-center gap-2 text-xs text-white/45">
-          <span>마지막 할인: {pred.lastSaleDate}</span>
-          <span>·</span>
-          <span>주기 약 {pred.avgCycleDays}일</span>
-        </div>
-        {/* 신뢰도 + 빈도 */}
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conf.cls}`}>
-            {conf.text}
-          </span>
-          <span className={`text-[10px] font-semibold ${trend.cls}`}>
-            {trend.text}
-          </span>
-        </div>
-      </div>
-
-      {/* 예상 할인율 */}
-      <div className="flex-shrink-0 text-right">
-        <div className="mb-0.5 text-[10px] text-white/40">예상 할인</div>
-        <div className="text-sm font-black text-[#d3bcff]">-{pred.expectedDiscount}%</div>
-        <div className="text-[10px] text-white/35 line-through">
-          -{pred.lastDiscountRate}%
-        </div>
-      </div>
-
-      {/* 예상 할인일 */}
-      <div className="flex-shrink-0 text-right">
-        <div className="mb-0.5 text-[10px] text-white/40">예상 할인일</div>
-        <div className="text-xs font-semibold text-white/80">{pred.nextPredictedDate}</div>
-      </div>
-
-      {/* D-day */}
-      <div className="flex-shrink-0 text-right">
-        <div className={`text-xl font-black ${ddayColor(pred.nextDaysUntil)}`}>
-          D-{pred.nextDaysUntil}
-        </div>
-        <Link
-          href={`/predict/${pred.slug}`}
-          className="mt-1 inline-block rounded-lg border border-white/10 bg-[#29134f] px-2 py-1 text-[10px] text-white/60 hover:border-accent/50"
-          onClick={(e) => e.stopPropagation()}
-        >
-          상세 예측
-        </Link>
-      </div>
-    </Link>
-  );
-}
-
-// ─────────────────────────────────────────────
-// 메인 컴포넌트
-// ─────────────────────────────────────────────
-type GameSortKey = 'dday' | 'discount' | 'confidence';
-
+// ═══════════════════════════════════════════════════════
+//  메인 컴포넌트
+// ═══════════════════════════════════════════════════════
 export function SalePredictPage() {
-  const [gameSortKey, setGameSortKey] = useState<GameSortKey>('dday');
+  const [selectedId, setSelectedId]     = useState<number>(games[0].steamAppId);
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [prediction, setPrediction]     = useState<PredictionData | null>(null);
+  const [loading, setLoading]           = useState(false);
 
-  const sortedPredictions = useMemo(() => {
-    return [...GAME_PREDICTIONS].sort((a, b) => {
-      if (gameSortKey === 'dday') return a.nextDaysUntil - b.nextDaysUntil;
-      if (gameSortKey === 'discount') return b.expectedDiscount - a.expectedDiscount;
-      // confidence: high > medium > low
-      const score = (c: GameSalePrediction['confidence']) =>
-        c === 'high' ? 3 : c === 'medium' ? 2 : 1;
-      return score(b.confidence) - score(a.confidence);
-    });
-  }, [gameSortKey]);
+  const filteredGames = useMemo(
+    () => games.filter((g) => g.title.toLowerCase().includes(searchQuery.toLowerCase())),
+    [searchQuery],
+  );
+  const selectedGame = useMemo(
+    () => games.find((g) => g.steamAppId === selectedId) ?? games[0],
+    [selectedId],
+  );
 
-  const upcomingEvents = SALE_EVENTS.filter((e) => e.daysUntil >= 0).slice(0, 3);
-  const pastEvents = SALE_EVENTS.filter((e) => e.daysUntil < 0);
+  // 게임 변경 시 API 호출
+  useEffect(() => {
+    setLoading(true);
+    fetch(`${API_BASE}/api/game/${selectedId}/discount-prediction`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => setPrediction(data))
+      .catch(() => setPrediction(null))
+      .finally(() => setLoading(false));
+  }, [selectedId]);
 
-  const GAME_SORT_TABS: { key: GameSortKey; label: string }[] = [
-    { key: 'dday', label: '할인 임박순' },
-    { key: 'discount', label: '예상 할인율 순' },
-    { key: 'confidence', label: '신뢰도 순' },
-  ];
+  // 환율 계산
+  const usdToKrw = exchangeRates.usdToKrw;
+  const jpyToKrw = exchangeRates.jpyToKrw;
+  const usdKrw = Math.round(parseFloat(selectedGame.prices.us.replace('$', '').replace('Free', '0')) * usdToKrw);
+  const jpyKrw = Math.round(parseFloat(selectedGame.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0')) * jpyToKrw);
+  const krw = selectedGame.priceKRW;
+
+  // 다음 예측까지 D-day
+  const daysUntilNext = useMemo(() => {
+    if (!prediction?.nextPredictedDate) return null;
+    const today = new Date();
+    const next  = parseDate(prediction.nextPredictedDate);
+    return Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }, [prediction]);
 
   return (
     <div className="space-y-6">
 
-      {/* ── 섹션 1: 스팀 정기 세일 이벤트 ── */}
-      <section className="panel p-5 md:p-6">
-        <div className="mb-1 text-sm font-semibold text-[#f0b5ff]">Steam 정기 이벤트</div>
-        <div className="mb-1 text-[28px] font-black tracking-tight text-white">
-          세일 일정 예측
+      {/* ── 헤더 ── */}
+      <div>
+        <div className="text-[28px] font-black tracking-tight text-white">할인 예측</div>
+        <div className="mt-1 text-sm text-white/50">
+          게임별 과거 할인 패턴을 분석해 다음 할인 시점을 예측합니다.
         </div>
-        <div className="mb-6 text-sm text-white/50">
-          과거 스팀 세일 패턴을 분석해 예상 일정을 제공합니다. 실제 일정은 Valve 공식 발표 기준입니다.
+      </div>
+
+      {/* ── 게임 선택 드롭다운 ── */}
+      <div className="panel p-4">
+        <div className="mb-2 text-xs text-white/45">게임 선택</div>
+        <div className="relative">
+          <div
+            className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-[#1a1033] p-3 transition hover:border-[#c084fc]/50"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+          >
+            <img src={getSteamHeader(selectedGame.steamAppId)} alt={selectedGame.title}
+              className="h-10 w-16 rounded-lg object-cover" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-white">{selectedGame.title}</div>
+              <div className="text-xs text-white/45">{selectedGame.genre.join(' · ')}</div>
+            </div>
+            {prediction?.isOnSale && (
+              <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs text-emerald-300 border border-emerald-400/30">
+                할인 중 -{prediction.currentDiscount}%
+              </span>
+            )}
+            <span className="text-white/40">{dropdownOpen ? '▲' : '▼'}</span>
+          </div>
+
+          {dropdownOpen && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-white/10 bg-[#1a0d39] shadow-2xl">
+              <div className="p-2">
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="게임 검색..."
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/30"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                {filteredGames.map((g) => (
+                  <div
+                    key={g.steamAppId}
+                    className={`flex cursor-pointer items-center gap-3 px-3 py-2 transition hover:bg-white/5 ${selectedId === g.steamAppId ? 'bg-[#c084fc]/10' : ''}`}
+                    onClick={() => { setSelectedId(g.steamAppId); setDropdownOpen(false); setSearchQuery(''); }}
+                  >
+                    <img src={getSteamHeader(g.steamAppId)} alt={g.title} className="h-8 w-12 rounded object-cover" />
+                    <div>
+                      <div className="text-sm text-white">{g.title}</div>
+                      <div className="text-xs text-white/40">{g.genre.join(' · ')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 메인 콘텐츠: 좌(정보) + 우(캘린더) ── */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+
+        {/* ── 좌측: 환율 + 할인 예측 정보 ── */}
+        <div className="space-y-4">
+
+          {/* 현재 가격 상태 */}
+          <div className="panel-soft p-4">
+            <div className="mb-3 text-sm font-semibold text-white">현재 가격</div>
+            {loading ? (
+              <div className="flex h-12 items-center justify-center">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" />
+              </div>
+            ) : (
+              <>
+                <div className={`mb-3 rounded-xl border p-3 text-sm ${
+                  prediction?.isOnSale
+                    ? 'border-emerald-400/30 bg-emerald-400/8 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-white/60'
+                }`}>
+                  {prediction?.isOnSale
+                    ? `🎉 현재 ${prediction.currentDiscount}% 할인 중! ${formatKRW(prediction.currentPrice)}`
+                    : `💤 현재 할인 없음 — 정가 ${formatKRW(selectedGame.priceKRW)}`}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 환율 기반 국가별 가격 */}
+          <div className="panel-soft p-4">
+            <div className="mb-3 text-sm font-semibold text-white">현재 환율 기준 가격</div>
+            <div className="mb-2 text-[10px] text-white/35">기준: {exchangeRates.updatedAt}</div>
+            <div className="space-y-2">
+              {[
+                { label: '🇰🇷 한국', raw: selectedGame.prices.kr, krwEquiv: krw,    color: '#c084fc' },
+                { label: '🇺🇸 미국', raw: selectedGame.prices.us, krwEquiv: usdKrw, color: '#60a5fa' },
+                { label: '🇯🇵 일본', raw: selectedGame.prices.jp, krwEquiv: jpyKrw, color: '#f472b6' },
+              ].map((c) => {
+                const maxKrw = Math.max(krw, usdKrw, jpyKrw, 1);
+                return (
+                  <div key={c.label}>
+                    <div className="mb-0.5 flex justify-between text-xs">
+                      <span className="text-white/60">{c.label}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-white/40">{c.raw}</span>
+                        <span className="font-semibold" style={{ color: c.color }}>{formatKRW(c.krwEquiv)}</span>
+                        {c.krwEquiv === Math.min(krw, usdKrw, jpyKrw) && krw > 0 && (
+                          <span className="text-emerald-400">🏆</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+                      <div className="h-full rounded-full" style={{ width: `${(c.krwEquiv / maxKrw) * 100}%`, background: c.color, opacity: 0.75 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 text-[10px] text-white/30">
+              USD ×{usdToKrw.toLocaleString()} / JPY ×{jpyToKrw}
+            </div>
+          </div>
+
+          {/* 할인 예측 정보 */}
+          <div className="panel-soft p-4">
+            <div className="mb-3 text-sm font-semibold text-white">할인 예측</div>
+            {loading ? (
+              <div className="flex h-16 items-center justify-center">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" />
+              </div>
+            ) : prediction ? (
+              <div className="space-y-3">
+                {prediction.avgCycleDays && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/55">평균 할인 주기</span>
+                    <span className="font-semibold text-[#c084fc]">약 {prediction.avgCycleDays}일</span>
+                  </div>
+                )}
+                {prediction.lastSaleDate && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/55">마지막 할인일</span>
+                    <span className="text-white/80">{prediction.lastSaleDate}</span>
+                  </div>
+                )}
+                {prediction.nextPredictedDate && daysUntilNext !== null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/55">다음 예상 할인일</span>
+                    <div className="text-right">
+                      <div className="font-semibold text-amber-400">{prediction.nextPredictedDate}</div>
+                      <div className={`text-xs font-bold ${ddayColor(daysUntilNext)}`}>
+                        {ddayText(daysUntilNext)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* 한 줄 판단 */}
+                <div className={`rounded-xl border p-2.5 text-xs leading-5 ${
+                  daysUntilNext !== null && daysUntilNext <= 14
+                    ? 'border-emerald-400/20 bg-emerald-400/8 text-emerald-300'
+                    : 'border-white/8 bg-white/4 text-white/55'
+                }`}>
+                  {prediction.isOnSale
+                    ? '✅ 현재 할인 중이에요. 지금 구매가 좋아요!'
+                    : daysUntilNext !== null && daysUntilNext <= 14
+                    ? '⏰ 할인이 곧 예상돼요. 조금만 기다려보세요!'
+                    : daysUntilNext !== null && daysUntilNext <= 60
+                    ? '🕐 1~2달 내 할인이 예상돼요. 위시리스트에 추가해두세요.'
+                    : '💤 당분간 할인 가능성이 낮아요. 정가 구매를 고려하세요.'}
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-white/35">할인 이력 데이터가 없습니다.</div>
+            )}
+          </div>
         </div>
 
-        {/* 임박한 세일 */}
-        <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-white/35">
-          예정된 세일
-        </div>
-        <div className="mb-6 grid gap-3 md:grid-cols-3">
-          {upcomingEvents.map((event) => (
-            <SaleEventCard key={event.name} event={event} />
-          ))}
-        </div>
+        {/* ── 우측: 할인 예측 캘린더 ── */}
+        <div className="space-y-4">
+          <div className="panel p-4">
+            <div className="mb-3 text-sm font-semibold text-white">할인 예측 캘린더</div>
+            <div className="mb-3 text-xs text-white/40">과거 할인일과 다음 예측 할인일을 달력에서 확인하세요.</div>
+            <DiscountCalendar prediction={prediction} />
+          </div>
 
-        {/* 연간 세일 타임라인 */}
-        <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-white/35">
-          연간 세일 타임라인
+          {/* 최근 할인 이력 */}
+          {prediction && prediction.history.length > 0 && (
+            <div className="panel-soft p-4">
+              <div className="mb-3 text-sm font-semibold text-white">최근 할인 이력</div>
+              <div className="space-y-1.5">
+                {prediction.history.slice(0, 6).map((h, i) => (
+                  <div key={i} className="flex justify-between rounded-lg bg-white/4 px-3 py-2 text-xs text-white/60">
+                    <span>{h.date}</span>
+                    <span className="text-emerald-400 font-semibold">-{h.discount}%</span>
+                    <span>{formatKRW(h.price)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="relative mb-6 overflow-x-auto pb-2">
-          {/* 타임라인 바 */}
-          <div className="relative h-10 min-w-[600px]">
+      </div>
+
+      {/* ── 스팀 정기 세일 타임라인 ── */}
+      <section className="panel p-5">
+        <div className="mb-1 text-sm font-semibold text-[#f0b5ff]">참고</div>
+        <div className="mb-4 text-lg font-bold text-white">스팀 정기 세일 일정</div>
+
+        {/* 타임라인 바 */}
+        <div className="relative mb-2 overflow-x-auto pb-4">
+          <div className="relative h-10 min-w-[560px]">
             <div className="absolute inset-y-[18px] left-0 right-0 h-0.5 bg-white/10" />
-            {SALE_EVENTS.filter((e) => e.daysUntil >= 0).map((event) => {
-              // 1월~12월 기준 월별 위치 계산
-              const month = parseInt(event.startDate.split('-')[1]) - 1; // 0~11
-              const pct = (month / 11) * 100;
+            {SALE_EVENTS.map((event) => {
+              const pct = ((event.month - 1) / 11) * 100;
+              const isPast  = event.daysUntil < 0;
+              const isClose = event.daysUntil >= 0 && event.daysUntil <= 30;
               return (
-                <div
-                  key={event.name}
-                  style={{ left: `${pct}%` }}
-                  className="absolute -translate-x-1/2"
-                >
+                <div key={event.name} style={{ left: `${pct}%` }} className="absolute -translate-x-1/2">
                   <div className={`h-4 w-4 rounded-full border-2 ${
-                    event.daysUntil <= 14
-                      ? 'border-[#9b5cff] bg-[#9b5cff]'
-                      : event.confidence === 'high'
-                      ? 'border-[#3fd09d] bg-[#1a3d2b]'
-                      : event.confidence === 'medium'
-                      ? 'border-[#f0c040] bg-[#3d330a]'
-                      : 'border-white/30 bg-white/10'
+                    isPast  ? 'border-white/15 bg-white/5' :
+                    isClose ? 'border-[#9b5cff] bg-[#9b5cff]' :
+                    event.confidence === 'high'   ? 'border-emerald-400 bg-emerald-400/20' :
+                    'border-amber-400 bg-amber-400/20'
                   }`} />
-                  <div className="mt-1 -translate-x-1/4 whitespace-nowrap text-[9px] text-white/40">
-                    {event.name.replace('스팀 ', '')}
+                  <div className="mt-1.5 -translate-x-1/4 whitespace-nowrap text-[9px] text-white/40">
+                    {event.name}
                   </div>
                 </div>
               );
             })}
           </div>
-          {/* 월 라벨 */}
-          <div className="mt-4 flex min-w-[600px] justify-between text-[10px] text-white/25">
-            {['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'].map((m) => (
+          <div className="flex min-w-[560px] justify-between text-[10px] text-white/20 mt-4">
+            {['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'].map(m => (
               <span key={m}>{m}</span>
             ))}
           </div>
         </div>
 
-        {/* 지난 세일 */}
-        {pastEvents.length > 0 && (
-          <>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/25">
-              지난 세일
+        {/* 예정 세일 카드 */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {SALE_EVENTS.filter(e => e.daysUntil >= 0).slice(0, 3).map((event) => (
+            <div key={event.name} className={`rounded-xl border p-3 ${
+              event.daysUntil <= 30
+                ? 'border-[#9b5cff]/40 bg-[#1e0f3f]'
+                : 'border-white/8 bg-white/[0.03]'
+            }`}>
+              <div className="text-sm font-semibold text-white">{event.name}</div>
+              <div className={`mt-1 text-xs font-bold ${ddayColor(event.daysUntil)}`}>
+                {ddayText(event.daysUntil)}
+              </div>
+              <div className="mt-1 text-[10px] text-white/35">
+                {event.confidence === 'high' ? '높은 신뢰도' : '보통 신뢰도'}
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              {pastEvents.map((event) => (
-                <SaleEventCard key={event.name} event={event} />
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* ── 섹션 2: 게임별 할인 시점 예측 ── */}
-      <section className="panel p-5 md:p-6">
-        <div className="mb-1 text-sm font-semibold text-[#f0b5ff]">게임별 분석</div>
-        <div className="mb-1 text-[28px] font-black tracking-tight text-white">
-          다음 할인 시점 예측
-        </div>
-        <div className="mb-5 text-sm text-white/50">
-          각 게임의 과거 할인 주기와 패턴을 분석해 다음 할인 예상 시점을 보여줍니다.
-        </div>
-
-        {/* 정렬 탭 */}
-        <div className="mb-5 flex flex-wrap gap-2">
-          {GAME_SORT_TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setGameSortKey(t.key)}
-              className={`rounded-xl border px-3 py-1.5 text-xs transition ${
-                gameSortKey === t.key
-                  ? 'border-[#8d60ff] bg-[#6e35dc] text-white'
-                  : 'border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80'
-              }`}
-            >
-              {t.label}
-            </button>
           ))}
-        </div>
-
-        {/* 게임 목록 */}
-        <div className="space-y-2">
-          {sortedPredictions.map((pred, idx) => (
-            <GamePredictionRow key={pred.slug} pred={pred} rank={idx + 1} />
-          ))}
-        </div>
-
-        {/* 안내 */}
-        <div className="mt-6 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs leading-6 text-white/35">
-          현재 더미 데이터입니다. DB 연결 시 <code className="text-white/50">SALE_EVENTS</code>는 크롤링한 Steam 세일 뉴스로,{' '}
-          <code className="text-white/50">GAME_PREDICTIONS</code>는 게임별 할인 이력 분석 결과로 교체하세요.
         </div>
       </section>
     </div>
