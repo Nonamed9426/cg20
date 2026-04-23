@@ -5,8 +5,8 @@ import { ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Game, getSteamHeader, getSteamStoreUrl, statPanels } from '@/lib/data';
 import { GameCard } from './game-card';
-
-const API_BASE = 'http://localhost:8000';
+import { API_BASE } from '@/lib/api';
+import { useExchange } from '@/lib/exchange-context';
 
 const accentClass = {
   purple: 'from-[#9f6fff] to-[#5d33d6]',
@@ -16,12 +16,35 @@ const accentClass = {
 } as const;
 
 // ── 타입 ──────────────────────────────────────────────────
+type RawReview = {
+  is_positive: boolean;
+  playtime_hours: number;
+  content: string;
+  date: number;
+};
+
 type ReviewData = {
   positive: number;
   negative: number;
   totalReviews: number;
   topPositive: { content: string; playtime_hours: number }[];
   topNegative: { content: string; playtime_hours: number }[];
+};
+
+type PriceData = {
+  KRW: number;
+  USD: number;
+  JPY: number;
+};
+
+type NewsItem = {
+  gid: string;
+  title: string;
+  url: string;
+  author: string;
+  contents: string;
+  feedlabel: string;
+  date: number;
 };
 
 type PredictionData = {
@@ -35,27 +58,63 @@ type PredictionData = {
   history: { date: string; discount: number; price: number }[];
 };
 
-// ── 탭 콘텐츠 컴포넌트 ────────────────────────────────────
+// ── 유틸 ──────────────────────────────────────────────────
+function stripHtml(str: string) {
+  return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function formatDate(unix: number) {
+  return new Date(unix * 1000).toLocaleDateString('ko-KR');
+}
+
+function LoadingSpinner() {
+  return (
+    <div className="flex h-20 items-center justify-center">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" />
+    </div>
+  );
+}
+
+// ── 탭: 리뷰 요약 ────────────────────────────────────────
 function TabReview({ gameId }: { gameId: number }) {
   const [data, setData] = useState<ReviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/game/${gameId}/reviews`)
+    fetch(`${API_BASE}/steam-game/${gameId}/reviews`)
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setData)
+      .then((json) => {
+        const reviews: RawReview[] = json.data ?? [];
+        const total    = reviews.length;
+        if (total === 0) throw new Error();
+        const pos      = reviews.filter((r) => r.is_positive);
+        const neg      = reviews.filter((r) => !r.is_positive);
+        const pick = (arr: RawReview[], n = 3) =>
+          [...arr]
+            .filter((r) => r.content?.trim())
+            .sort((a, b) => b.playtime_hours - a.playtime_hours)
+            .slice(0, n)
+            .map((r) => ({ content: r.content.slice(0, 200), playtime_hours: Math.round(r.playtime_hours) }));
+
+        setData({
+          positive: Math.round(pos.length / total * 100),
+          negative: Math.round(neg.length / total * 100),
+          totalReviews: total,
+          topPositive: pick(pos),
+          topNegative: pick(neg),
+        });
+      })
       .catch(() => setError('리뷰 데이터를 불러오지 못했습니다.'))
       .finally(() => setLoading(false));
   }, [gameId]);
 
-  if (loading) return <div className="flex h-20 items-center justify-center"><div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" /></div>;
+  if (loading) return <LoadingSpinner />;
   if (error)   return <p className="text-xs text-red-400">{error}</p>;
   if (!data)   return null;
 
   return (
     <div className="space-y-4">
-      {/* 긍정/부정 비율 */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <div className="mb-1 flex justify-between text-xs text-white/60">
@@ -68,31 +127,25 @@ function TabReview({ gameId }: { gameId: number }) {
         </div>
         <span className="text-xs text-white/40">총 {data.totalReviews.toLocaleString()}개</span>
       </div>
-
-      {/* 긍정 리뷰 */}
       {data.topPositive.length > 0 && (
         <div>
           <div className="mb-2 text-xs font-semibold text-emerald-400">👍 추천 리뷰</div>
           <div className="space-y-2">
             {data.topPositive.map((r, i) => (
               <div key={i} className="rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-3 text-xs leading-5 text-white/70">
-                {r.content}
-                <span className="ml-2 text-white/30">{r.playtime_hours}시간</span>
+                {r.content}<span className="ml-2 text-white/30">{r.playtime_hours}시간</span>
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {/* 부정 리뷰 */}
       {data.topNegative.length > 0 && (
         <div>
           <div className="mb-2 text-xs font-semibold text-red-400">👎 비추천 리뷰</div>
           <div className="space-y-2">
             {data.topNegative.map((r, i) => (
               <div key={i} className="rounded-xl border border-red-400/15 bg-red-400/5 p-3 text-xs leading-5 text-white/70">
-                {r.content}
-                <span className="ml-2 text-white/30">{r.playtime_hours}시간</span>
+                {r.content}<span className="ml-2 text-white/30">{r.playtime_hours}시간</span>
               </div>
             ))}
           </div>
@@ -102,6 +155,7 @@ function TabReview({ gameId }: { gameId: number }) {
   );
 }
 
+// ── 탭: 구매 타이밍 ──────────────────────────────────────
 function TabPrediction({ gameId }: { gameId: number }) {
   const [data, setData] = useState<PredictionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,20 +169,17 @@ function TabPrediction({ gameId }: { gameId: number }) {
       .finally(() => setLoading(false));
   }, [gameId]);
 
-  if (loading) return <div className="flex h-20 items-center justify-center"><div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" /></div>;
+  if (loading) return <LoadingSpinner />;
   if (error)   return <p className="text-xs text-red-400">{error}</p>;
   if (!data)   return null;
 
   return (
     <div className="space-y-4">
-      {/* 현재 상태 */}
       <div className={`rounded-xl border p-3 text-sm ${data.isOnSale ? 'border-emerald-400/30 bg-emerald-400/8 text-emerald-300' : 'border-white/10 bg-white/5 text-white/60'}`}>
         {data.isOnSale
           ? `🎉 현재 ${data.currentDiscount}% 할인 중! ₩${data.currentPrice.toLocaleString()}`
           : `💤 현재 할인 없음 — 정가 ₩${data.regularPrice.toLocaleString()}`}
       </div>
-
-      {/* 예측 정보 */}
       <div className="space-y-2 text-sm">
         {data.avgCycleDays && (
           <div className="flex justify-between text-white/65">
@@ -149,8 +200,6 @@ function TabPrediction({ gameId }: { gameId: number }) {
           </div>
         )}
       </div>
-
-      {/* 최근 할인 이력 */}
       {data.history.length > 0 && (
         <div>
           <div className="mb-2 text-xs text-white/45">최근 할인 이력</div>
@@ -165,8 +214,7 @@ function TabPrediction({ gameId }: { gameId: number }) {
           </div>
         </div>
       )}
-
-      <Link href={`/predict/${gameId}`} className="block rounded-xl border border-white/10 bg-white/5 py-2 text-center text-xs text-white/60 hover:border-[#c084fc]/50 hover:text-white/80 transition">
+      <Link href={`/predict/${gameId}`} target="_blank" rel="noreferrer" className="block rounded-xl border border-white/10 bg-white/5 py-2 text-center text-xs text-white/60 hover:border-[#c084fc]/50 hover:text-white/80 transition">
         할인 예측 캘린더 전체 보기 →
       </Link>
     </div>
@@ -177,6 +225,44 @@ function TabPrediction({ gameId }: { gameId: number }) {
 export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
   const [activeTab, setActiveTab] = useState<'intro' | 'review' | 'timing'>('intro');
   const [expandedStat, setExpandedStat] = useState<string | null>(null);
+  const rates = useExchange();
+
+  // ── 실시간 가격 API ───────────────────────────────────────
+  const [prices, setPrices] = useState<PriceData | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/steam-game/${game.steamAppId}/price`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => json?.prices ? setPrices(json.prices) : null)
+      .catch(() => {});
+  }, [game.steamAppId]);
+
+  // ── 뉴스 API ──────────────────────────────────────────────
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  useEffect(() => {
+    fetch(`${API_BASE}/steam-game/${game.steamAppId}/news`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => { if (json?.data) setNews(json.data.slice(0, 2)); })
+      .catch(() => {})
+      .finally(() => setNewsLoading(false));
+  }, [game.steamAppId]);
+
+  // 가격 — API 우선, 없으면 더미
+  const krwPrice = prices?.KRW ?? game.priceKRW;
+  const usdPrice = prices?.USD ?? parseFloat(game.prices.us.replace('$', '').replace('Free', '0'));
+  const jpyPrice = prices?.JPY ?? parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0'));
+
+  // 환율 환산
+  const usdKrw = Math.round(usdPrice * rates.usd);
+  const jpyKrw = Math.round(jpyPrice * rates.jpy);
+
+  const formatPrice = (currency: string, val: number) => {
+    if (val === 0) return '무료';
+    if (currency === 'KRW') return `₩${val.toLocaleString()}`;
+    if (currency === 'USD') return `$${val.toFixed(2)}`;
+    if (currency === 'JPY') return `¥${val.toLocaleString()}`;
+    return `${val}`;
+  };
 
   const tabs = [
     { key: 'intro',   label: '게임 소개' },
@@ -232,9 +318,17 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
             <div className="flex flex-col gap-4">
               {/* ── 맨 위 박스: 할인/가격/버튼 (고정 높이) ── */}
               <div className="rounded-[24px] border border-line/60 bg-[#241047] p-5 shadow-glow">
-                <div className="text-emerald-400 text-3xl font-bold">-{game.discountRate}%</div>
-                <div className="mt-1 text-2xl font-bold text-mint">{game.prices.kr}</div>
-                <div className="mt-1 text-sm text-white/35 line-through">₩{game.originalKRW.toLocaleString()}</div>
+                <div className="text-emerald-400 text-3xl font-bold">
+                  {game.discountRate > 0 ? `-${game.discountRate}%` : '정가'}
+                </div>
+                <div className="mt-1 text-2xl font-bold text-mint">
+                  {formatPrice('KRW', krwPrice)}
+                </div>
+                {game.discountRate > 0 && (
+                  <div className="mt-1 text-sm text-white/35 line-through">
+                    ₩{game.originalKRW.toLocaleString()}
+                  </div>
+                )}
                 <div className="mt-2 text-sm text-white/70">{game.reviewLabel} · {game.score}점</div>
                 <div className="mt-4 flex gap-2">
                   <a href={getSteamStoreUrl(game.steamAppId)} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">지금 구매</a>
@@ -247,13 +341,26 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
                 </div>
               </div>
 
-              {/* ── 중간 박스: 환율 (고정 높이 — 왼쪽 탭박스와 top 맞춤) ── */}
+              {/* ── 중간 박스: 환율 ── */}
               <div className="panel-soft p-4">
-                <div className="mb-3 text-sm font-semibold">환율</div>
+                <div className="mb-1 text-sm font-semibold">환율</div>
+                {rates.loading
+                  ? <div className="text-xs text-white/40">환율 로딩 중...</div>
+                  : <div className="mb-1 text-[10px] text-white/30">기준: {rates.updatedAt}</div>
+                }
                 <div className="space-y-2 text-sm text-white/65">
-                  <div className="flex justify-between"><span>한화</span><span className="font-semibold text-mint">{game.prices.kr}</span></div>
-                  <div className="flex justify-between"><span>엔화</span><span>{game.prices.jp}</span></div>
-                  <div className="flex justify-between"><span>달러</span><span>{game.prices.us}</span></div>
+                  <div className="flex justify-between">
+                    <span>한화</span>
+                    <span className="font-semibold text-mint">{formatPrice('KRW', krwPrice)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>엔화</span>
+                    <span>{formatPrice('JPY', jpyPrice)} <span className="text-xs text-white/35">(≈₩{jpyKrw.toLocaleString()})</span></span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>달러</span>
+                    <span>{formatPrice('USD', usdPrice)} <span className="text-xs text-white/35">(≈₩{usdKrw.toLocaleString()})</span></span>
+                  </div>
                 </div>
               </div>
 
@@ -288,37 +395,73 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
           <div className="panel p-5 md:p-6">
             <div className="mb-4 section-title">할인 비교 후 추천</div>
             <div className="space-y-2 text-sm text-white/65">
-              <div className="flex justify-between"><span>한화</span><span className="font-semibold text-mint">{game.prices.kr}</span></div>
-              <div className="flex justify-between"><span>일본</span><span>{game.prices.jp}</span></div>
-              <div className="flex justify-between"><span>미국</span><span>{game.prices.us}</span></div>
+              <div className="flex justify-between">
+                <span>한화</span>
+                <span className="font-semibold text-mint">{formatPrice('KRW', krwPrice)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>일본</span>
+                <span>{formatPrice('JPY', jpyPrice)} <span className="text-xs text-white/35">(≈₩{jpyKrw.toLocaleString()})</span></span>
+              </div>
+              <div className="flex justify-between">
+                <span>미국</span>
+                <span>{formatPrice('USD', usdPrice)} <span className="text-xs text-white/35">(≈₩{usdKrw.toLocaleString()})</span></span>
+              </div>
             </div>
-            <p className="mt-4 text-xs leading-6 text-white/50">환율 기반 비교에서는 한국 가격이 가장 직관적이며, 시즌성 할인 주기도 비교적 뚜렷합니다.</p>
+            {!rates.loading && (
+              <div className="mt-2 text-[10px] text-white/30">환율 기준: {rates.updatedAt}</div>
+            )}
+            <div className="mt-3 rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-2.5 text-xs text-emerald-300">
+              💡 {
+                Math.min(krwPrice, usdKrw, jpyKrw) === krwPrice ? '한국' :
+                Math.min(krwPrice, usdKrw, jpyKrw) === usdKrw  ? '미국' : '일본'
+              } 구매가 가장 저렴해요.
+            </div>
           </div>
         </section>
 
-        {/* ── 게임 소식 — more 버튼 → 게임 소식 페이지로 이동 ── */}
+        {/* ── 게임 소식 ── */}
         <section className="panel p-5 md:p-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="section-title">게임 소식</div>
-            <Link
-              href={`/games/${game.steamAppId}/news`}
+            <a
+              href={`https://store.steampowered.com/news/app/${game.steamAppId}`}
+              target="_blank" rel="noreferrer"
               className="text-xs text-white/45 hover:text-white/70 transition"
             >
               more →
-            </Link>
+            </a>
           </div>
-          <div className="space-y-4">
-            {game.news.slice(0, 2).map((news, idx) => (
-              <div key={news.title} className="grid gap-4 rounded-2xl border border-white/6 bg-white/[0.03] p-3 md:grid-cols-[180px_1fr]">
-                <div className={`h-[96px] rounded-xl ${idx % 2 === 0 ? 'bg-[#5a3f2d]' : 'bg-[#7b6a4a]'}`} />
-                <div>
-                  <div className="text-sm text-white/45">{news.date}</div>
-                  <div className="mt-1 text-base font-semibold">{news.title}</div>
-                  <p className="mt-2 text-sm leading-6 text-white/65">{news.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {newsLoading ? (
+            <LoadingSpinner />
+          ) : news.length > 0 ? (
+            <div className="space-y-4">
+              {news.map((item, idx) => (
+                <a
+                  key={item.gid}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="grid gap-4 rounded-2xl border border-white/6 bg-white/[0.03] p-3 transition hover:border-white/15 md:grid-cols-[180px_1fr]"
+                >
+                  <div className={`h-[96px] rounded-xl ${idx % 2 === 0 ? 'bg-[#5a3f2d]' : 'bg-[#7b6a4a]'}`} />
+                  <div>
+                    <div className="flex items-center gap-2 text-xs text-white/40">
+                      <span>{item.feedlabel}</span>
+                      <span>·</span>
+                      <span>{formatDate(item.date)}</span>
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{item.title}</div>
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/65">
+                      {stripHtml(item.contents)}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-white/35">게임 소식이 없습니다.</div>
+          )}
         </section>
 
         {/* ── 바로가기 — 게임 소식 아래로 이동 ── */}

@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import {
   Game,
-  exchangeRates,
   games,
   getDailyRecommendedGame,
   getGame,
@@ -12,6 +11,7 @@ import {
   saleNews,
 } from '@/lib/data';
 import { GameCard } from './game-card';
+import { useExchange } from '@/lib/exchange-context';
 
 function SummaryColumn({ title, items }: { title: string; items: Game[] }) {
   return (
@@ -41,14 +41,15 @@ function SummaryColumn({ title, items }: { title: string; items: Game[] }) {
 }
 
 export function HomePage() {
+  const rates = useExchange();
   const game = getDailyRecommendedGame();
-  const buyNow = [getGame('stardew-valley'), getGame('monster-hunter-world'), getGame('helldivers-2'), getGame('dark-and-darker')];
+  const buyNow   = [getGame('stardew-valley'), getGame('monster-hunter-world'), getGame('helldivers-2'), getGame('dark-and-darker')];
   const buyLater = [getGame('turbo-golf-racing'), getGame('sun-haven'), getGame('helldivers-2'), getGame('dark-and-darker')];
-  const similar = [getGame('travellers-rest'), getGame('sun-haven'), getGame('spiritfarer'), getGame('monster-hunter-world')];
+  const similar  = [getGame('travellers-rest'), getGame('sun-haven'), getGame('spiritfarer'), getGame('monster-hunter-world')];
 
   const krwBase = game.priceKRW;
-  const usKrw = Math.round(parseFloat(game.prices.us.replace('$', '')) * exchangeRates.usdToKrw);
-  const jpKrw = Math.round(parseFloat(game.prices.jp.replace('¥', '').replace(',', '')) * exchangeRates.jpyToKrw);
+  const usKrw = Math.round(parseFloat(game.prices.us.replace('$', '').replace('Free', '0')) * rates.usd);
+  const jpKrw = Math.round(parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0')) * rates.jpy);
 
   return (
     <div className="space-y-6">
@@ -123,18 +124,24 @@ export function HomePage() {
         <aside className="space-y-6">
           <section className="panel p-5">
             <div className="text-xl font-black text-white md:text-2xl">오늘의 환율</div>
-            <div className="mt-2 text-sm text-white/55 md:text-base">하나은행 매매기준율 예시 구조</div>
+            <div className="mt-2 text-sm text-white/55 md:text-base">하나은행 매매기준율 · 5분마다 자동 갱신</div>
             <div className="mt-5 space-y-4">
               <div className="rounded-[20px] bg-white/[0.04] p-5">
                 <div className="text-sm text-white/55">USD → KRW</div>
-                <div className="mt-2 text-2xl font-black text-white md:text-3xl">₩{exchangeRates.usdToKrw.toLocaleString()}</div>
+                <div className="mt-2 text-2xl font-black text-white md:text-3xl">
+                  {rates.loading ? '로딩 중...' : `₩${rates.usd.toLocaleString()}`}
+                </div>
               </div>
               <div className="rounded-[20px] bg-white/[0.04] p-5">
                 <div className="text-sm text-white/55">JPY → KRW</div>
-                <div className="mt-2 text-2xl font-black text-white md:text-3xl">₩{exchangeRates.jpyToKrw}</div>
+                <div className="mt-2 text-2xl font-black text-white md:text-3xl">
+                  {rates.loading ? '로딩 중...' : `₩${rates.jpy}`}
+                </div>
               </div>
             </div>
-            <div className="mt-4 text-sm text-white/45">업데이트 시각: {exchangeRates.updatedAt}</div>
+            <div className="mt-4 text-sm text-white/45">
+              업데이트 시각: {rates.loading ? '-' : rates.updatedAt}
+            </div>
           </section>
 
           <section className="panel p-5">
@@ -206,7 +213,9 @@ export function HomePage() {
           <section className="panel p-5">
             <div className="text-sm font-semibold text-[#f0b5ff]">환율 비교 추천</div>
             <div className="mt-1 text-2xl font-black tracking-tight text-white md:text-[36px]">국가별 구매 비교</div>
-            <div className="mt-2 text-sm text-white/45">기준: {exchangeRates.updatedAt}</div>
+            <div className="mt-2 text-sm text-white/45">
+              기준: {rates.loading ? '-' : rates.updatedAt}
+            </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <div className="rounded-[20px] bg-white/[0.04] p-4">

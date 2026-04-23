@@ -2,23 +2,34 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
-import { Game, getSteamHeader, exchangeRates } from '@/lib/data';
-
-const API_BASE = 'http://localhost:8000';
+import { Game, getSteamHeader } from '@/lib/data';
+import { API_BASE } from '@/lib/api';
+import { useExchange } from '@/lib/exchange-context';
 
 // ═══════════════════════════════════════════════════════
 //  타입
 // ═══════════════════════════════════════════════════════
-type PredictionData = {
-  gameId: number;
-  isOnSale: boolean;
-  currentDiscount: number;
-  currentPrice: number;
-  regularPrice: number;
-  avgCycleDays: number | null;
-  lastSaleDate: string | null;
-  nextPredictedDate: string | null;
-  history: { date: string; discount: number; price: number }[];
+type HistoryItem = {
+  date: string;
+  price: number;
+  regular_price: number;
+  discount_percent: number;
+};
+
+type PriceDetail = {
+  analysis: {
+    latest_price: number;
+    lowest_price: number;
+    is_lowest: boolean;
+    buying_advice: string;
+  };
+  history: HistoryItem[];
+};
+
+type PriceData = {
+  KRW: number;
+  USD: number;
+  JPY: number;
 };
 
 // ═══════════════════════════════════════════════════════
@@ -42,10 +53,40 @@ function ddayColor(days: number) {
   return 'text-white/60';
 }
 
+// 할인 이력에서 다음 예상 할인일 계산
+function calcNextPredicted(history: HistoryItem[]): { date: string | null; avgCycleDays: number | null; lastSaleDate: string | null } {
+  const sales = history.filter((h) => h.discount_percent > 0);
+  if (sales.length === 0) return { date: null, avgCycleDays: null, lastSaleDate: null };
+
+  const lastSaleDate = sales[0].date;
+
+  if (sales.length < 2) return { date: null, avgCycleDays: null, lastSaleDate };
+
+  // 할인 시작일끼리 간격 계산
+  const gaps: number[] = [];
+  for (let i = 0; i < sales.length - 1; i++) {
+    const a = parseDate(sales[i].date);
+    const b = parseDate(sales[i + 1].date);
+    const diff = Math.abs(Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)));
+    if (diff > 0) gaps.push(diff);
+  }
+  if (gaps.length === 0) return { date: null, avgCycleDays: null, lastSaleDate };
+
+  const avgCycleDays = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
+  const lastDate = parseDate(lastSaleDate);
+  lastDate.setDate(lastDate.getDate() + avgCycleDays);
+  const nextDate = lastDate.toISOString().split('T')[0];
+
+  return { date: nextDate, avgCycleDays, lastSaleDate };
+}
+
 // ═══════════════════════════════════════════════════════
 //  할인 예측 캘린더
 // ═══════════════════════════════════════════════════════
-function DiscountCalendar({ prediction }: { prediction: PredictionData | null }) {
+function DiscountCalendar({ history, nextPredictedDate }: {
+  history: HistoryItem[];
+  nextPredictedDate: string | null;
+}) {
   const today = new Date();
   const [viewYear, setViewYear]   = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -53,14 +94,12 @@ function DiscountCalendar({ prediction }: { prediction: PredictionData | null })
   const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
+  // 할인 있던 날짜 set
   const historyDates = useMemo(() => {
-    if (!prediction) return new Set<string>();
-    return new Set(prediction.history.map((h) => h.date));
-  }, [prediction]);
+    return new Set(history.filter((h) => h.discount_percent > 0).map((h) => h.date));
+  }, [history]);
 
-  const predictedDate = prediction?.nextPredictedDate
-    ? parseDate(prediction.nextPredictedDate)
-    : null;
+  const predictedDate = nextPredictedDate ? parseDate(nextPredictedDate) : null;
 
   function cellType(day: number) {
     const isToday = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
@@ -131,38 +170,54 @@ function DiscountCalendar({ prediction }: { prediction: PredictionData | null })
 //  메인 컴포넌트
 // ═══════════════════════════════════════════════════════
 export function PredictPage({ game }: { game: Game }) {
-  const [prediction, setPrediction] = useState<PredictionData | null>(null);
-  const [loading, setLoading]       = useState(true);
+  const [priceDetail, setPriceDetail] = useState<PriceDetail | null>(null);
+  const [prices, setPrices]           = useState<PriceData | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const rates = useExchange();
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/game/${game.steamAppId}/discount-prediction`)
-      .then((r) => r.ok ? r.json() : null)
-      .then(setPrediction)
-      .catch(() => setPrediction(null))
+    setLoading(true);
+    // KRW 가격 히스토리 + 실시간 가격 병렬 호출
+    Promise.all([
+      fetch(`${API_BASE}/steam-game/${game.steamAppId}/price-detail/KRW`).then(r => r.ok ? r.json() : null),
+      fetch(`${API_BASE}/steam-game/${game.steamAppId}/price`).then(r => r.ok ? r.json() : null),
+    ]).then(([detail, price]) => {
+      if (detail?.status === 'success') setPriceDetail(detail);
+      if (price?.prices) setPrices(price.prices);
+    }).catch(() => {})
       .finally(() => setLoading(false));
   }, [game.steamAppId]);
 
-  // 환율
-  const usdToKrw = exchangeRates.usdToKrw;
-  const jpyToKrw = exchangeRates.jpyToKrw;
-  const krw    = game.priceKRW;
-  const usdKrw = Math.round(parseFloat(game.prices.us.replace('$', '').replace('Free', '0')) * usdToKrw);
-  const jpyKrw = Math.round(parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0')) * jpyToKrw);
+  // 할인 예측 계산
+  const prediction = useMemo(() => {
+    if (!priceDetail) return null;
+    return calcNextPredicted(priceDetail.history);
+  }, [priceDetail]);
+
+  // 현재 가격 상태
+  const latest    = priceDetail?.history[0];
+  const isOnSale  = (latest?.discount_percent ?? 0) > 0;
+  const krwPrice  = prices?.KRW ?? latest?.price ?? game.priceKRW;
+  const usdPrice  = prices?.USD ?? parseFloat(game.prices.us.replace('$', '').replace('Free', '0'));
+  const jpyPrice  = prices?.JPY ?? parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0'));
+
+  const usdKrw = Math.round(usdPrice * rates.usd);
+  const jpyKrw = Math.round(jpyPrice * rates.jpy);
 
   const daysUntilNext = useMemo(() => {
-    if (!prediction?.nextPredictedDate) return null;
+    if (!prediction?.date) return null;
     const today = new Date();
-    const next  = parseDate(prediction.nextPredictedDate);
+    const next  = parseDate(prediction.date);
     return Math.round((next.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   }, [prediction]);
 
   const countries = [
-    { label: '🇰🇷 한국', raw: game.prices.kr, krwEquiv: krw,    color: '#c084fc' },
-    { label: '🇺🇸 미국', raw: game.prices.us, krwEquiv: usdKrw, color: '#60a5fa' },
-    { label: '🇯🇵 일본', raw: game.prices.jp, krwEquiv: jpyKrw, color: '#f472b6' },
+    { label: '🇰🇷 한국', raw: `₩${krwPrice.toLocaleString()}`,  krwEquiv: krwPrice, color: '#c084fc' },
+    { label: '🇺🇸 미국', raw: `$${usdPrice.toFixed(2)}`,         krwEquiv: usdKrw,  color: '#60a5fa' },
+    { label: '🇯🇵 일본', raw: `¥${jpyPrice.toLocaleString()}`,   krwEquiv: jpyKrw,  color: '#f472b6' },
   ];
-  const maxKrw  = Math.max(krw, usdKrw, jpyKrw, 1);
-  const minKrw  = Math.min(krw, usdKrw, jpyKrw);
+  const maxKrw = Math.max(krwPrice, usdKrw, jpyKrw, 1);
+  const minKrw = Math.min(krwPrice, usdKrw, jpyKrw);
 
   return (
     <div className="space-y-6">
@@ -198,22 +253,31 @@ export function PredictPage({ game }: { game: Game }) {
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" />
               </div>
             ) : (
-              <div className={`rounded-xl border p-3 text-sm ${
-                prediction?.isOnSale
-                  ? 'border-emerald-400/30 bg-emerald-400/8 text-emerald-300'
-                  : 'border-white/10 bg-white/5 text-white/60'
-              }`}>
-                {prediction?.isOnSale
-                  ? `🎉 현재 ${prediction.currentDiscount}% 할인 중! ${formatKRW(prediction.currentPrice)}`
-                  : `💤 현재 할인 없음 — 정가 ${formatKRW(game.priceKRW)}`}
-              </div>
+              <>
+                <div className={`rounded-xl border p-3 text-sm ${
+                  isOnSale
+                    ? 'border-emerald-400/30 bg-emerald-400/8 text-emerald-300'
+                    : 'border-white/10 bg-white/5 text-white/60'
+                }`}>
+                  {isOnSale
+                    ? `🎉 현재 ${latest?.discount_percent}% 할인 중! ${formatKRW(krwPrice)}`
+                    : `💤 현재 할인 없음 — 정가 ${formatKRW(krwPrice)}`}
+                </div>
+                {priceDetail && (
+                  <div className="mt-2 flex gap-3 text-[10px] text-white/40">
+                    <span>최저가: {formatKRW(priceDetail.analysis.lowest_price)}</span>
+                    <span>·</span>
+                    <span>{priceDetail.analysis.is_lowest ? '🎉 현재 최저가!' : '최저가 아님'}</span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* 환율 기준 국가별 가격 */}
           <div className="panel-soft p-4">
             <div className="mb-1 text-sm font-semibold text-white">국가별 가격 비교</div>
-            <div className="mb-3 text-[10px] text-white/30">기준: {exchangeRates.updatedAt} · USD ×{usdToKrw.toLocaleString()} / JPY ×{jpyToKrw}</div>
+            <div className="mb-3 text-[10px] text-white/30">기준: {rates.updatedAt} · USD ×{rates.usd.toLocaleString()} / JPY ×{rates.jpy}</div>
             <div className="space-y-3">
               {countries.map((c) => (
                 <div key={c.label}>
@@ -222,7 +286,7 @@ export function PredictPage({ game }: { game: Game }) {
                     <div className="flex items-center gap-1">
                       <span className="text-white/35">{c.raw}</span>
                       <span className="font-semibold" style={{ color: c.color }}>{formatKRW(c.krwEquiv)}</span>
-                      {c.krwEquiv === minKrw && krw > 0 && <span className="text-emerald-400">🏆</span>}
+                      {c.krwEquiv === minKrw && krwPrice > 0 && <span className="text-emerald-400">🏆</span>}
                     </div>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
@@ -242,6 +306,12 @@ export function PredictPage({ game }: { game: Game }) {
               </div>
             ) : prediction ? (
               <div className="space-y-3">
+                {/* API buying_advice 우선 표시 */}
+                {priceDetail?.analysis.buying_advice && (
+                  <div className="rounded-xl border border-[#c084fc]/20 bg-[#c084fc]/8 p-3 text-xs text-[#e9d5ff]">
+                    {priceDetail.analysis.buying_advice}
+                  </div>
+                )}
                 {prediction.avgCycleDays && (
                   <div className="flex justify-between text-sm">
                     <span className="text-white/50">평균 할인 주기</span>
@@ -254,32 +324,15 @@ export function PredictPage({ game }: { game: Game }) {
                     <span className="text-white/80">{prediction.lastSaleDate}</span>
                   </div>
                 )}
-                {prediction.nextPredictedDate && daysUntilNext !== null && (
+                {prediction.date && daysUntilNext !== null && (
                   <div className="flex justify-between text-sm">
                     <span className="text-white/50">다음 예상 할인일</span>
                     <div className="text-right">
-                      <div className="font-semibold text-amber-400">{prediction.nextPredictedDate}</div>
+                      <div className="font-semibold text-amber-400">{prediction.date}</div>
                       <div className={`text-xs font-bold ${ddayColor(daysUntilNext)}`}>{ddayText(daysUntilNext)}</div>
                     </div>
                   </div>
                 )}
-
-                {/* 한 줄 판단 */}
-                <div className={`rounded-xl border p-3 text-xs leading-5 ${
-                  prediction.isOnSale
-                    ? 'border-emerald-400/20 bg-emerald-400/8 text-emerald-300'
-                    : daysUntilNext !== null && daysUntilNext <= 14
-                    ? 'border-amber-400/20 bg-amber-400/8 text-amber-300'
-                    : 'border-white/8 bg-white/4 text-white/50'
-                }`}>
-                  {prediction.isOnSale
-                    ? '✅ 현재 할인 중이에요. 지금 구매가 좋아요!'
-                    : daysUntilNext !== null && daysUntilNext <= 14
-                    ? '⏰ 할인이 곧 예상돼요. 조금만 기다려보세요!'
-                    : daysUntilNext !== null && daysUntilNext <= 60
-                    ? '🕐 1~2달 내 할인이 예상돼요. 위시리스트에 추가해두세요.'
-                    : '💤 당분간 할인 가능성이 낮아요. 정가 구매를 고려하세요.'}
-                </div>
               </div>
             ) : (
               <div className="text-xs text-white/35">할인 이력 데이터가 없습니다.</div>
@@ -287,17 +340,20 @@ export function PredictPage({ game }: { game: Game }) {
           </div>
 
           {/* 최근 할인 이력 */}
-          {prediction && prediction.history.length > 0 && (
+          {priceDetail && priceDetail.history.filter(h => h.discount_percent > 0).length > 0 && (
             <div className="panel-soft p-4">
               <div className="mb-3 text-sm font-semibold text-white">최근 할인 이력</div>
               <div className="space-y-1.5">
-                {prediction.history.slice(0, 5).map((h, i) => (
-                  <div key={i} className="flex justify-between rounded-lg bg-white/4 px-3 py-2 text-xs text-white/55">
-                    <span>{h.date}</span>
-                    <span className="font-semibold text-emerald-400">-{h.discount}%</span>
-                    <span>{formatKRW(h.price)}</span>
-                  </div>
-                ))}
+                {priceDetail.history
+                  .filter((h) => h.discount_percent > 0)
+                  .slice(0, 5)
+                  .map((h, i) => (
+                    <div key={i} className="flex justify-between rounded-lg bg-white/4 px-3 py-2 text-xs text-white/55">
+                      <span>{h.date}</span>
+                      <span className="font-semibold text-emerald-400">-{h.discount_percent}%</span>
+                      <span>{formatKRW(h.price)}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -307,7 +363,10 @@ export function PredictPage({ game }: { game: Game }) {
         <div>
           <div className="mb-3 text-sm font-semibold text-white">할인 예측 캘린더</div>
           <div className="mb-2 text-xs text-white/35">과거 할인일과 다음 예측 할인일을 달력에서 확인하세요.</div>
-          <DiscountCalendar prediction={prediction} />
+          <DiscountCalendar
+            history={priceDetail?.history ?? []}
+            nextPredictedDate={prediction?.date ?? null}
+          />
         </div>
       </div>
     </div>

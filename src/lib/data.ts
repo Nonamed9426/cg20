@@ -386,11 +386,6 @@ export function searchGames(query: string) {
 }
 
 
-export const exchangeRates = {
-  usdToKrw: 1376,
-  jpyToKrw: 9.12,
-  updatedAt: '2026-04-17 09:00',
-};
 
 export const saleNews = [
   {
