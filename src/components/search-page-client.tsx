@@ -26,7 +26,6 @@ export function SearchPageClient() {
     const fetchSearchResults = async () => {
       setLoading(true);
       try {
-        // 쿼리 파라미터 조립
         const queryParams = new URLSearchParams();
         if (keyword.trim()) queryParams.append('q', keyword.trim());
         if (genre !== '전체') queryParams.append('genre', genre);
@@ -38,8 +37,29 @@ export function SearchPageClient() {
         
         const json = await response.json();
         
-        // API 응답 구조가 { data: [...] } 라고 가정 (필요시 맞게 수정)
-        setResults(json.data ?? []);
+        // 💡 핵심: 백엔드 데이터를 프론트엔드 Game 타입에 맞춰서 변환(Mapping)
+        const mappedResults = (json.data ?? []).map((item: any) => ({
+          steamAppId: item.gameId,     // API의 gameId를 steamAppId로 연결
+          title: item.name,            // API의 name을 title로 연결
+          slug: String(item.gameId),
+          genre: item.genres ?? [],    // API의 genres를 genre로 연결
+          tags: [],                    // 검색 API엔 태그가 없으므로 빈 배열
+          score: 0,
+          discountRate: 0,
+          priceKRW: item.price,
+          // GameCard가 에러를 뿜지 않도록 prices 객체를 강제로 만들어줌
+          prices: { 
+            kr: item.isFree ? '무료' : `₩${item.price.toLocaleString()}`, 
+            us: '-', 
+            jp: '-' 
+          },
+          description: '',
+          platform: [],
+          playtime: 0
+        }));
+
+        setResults(mappedResults); // 변환된 데이터를 상태에 저장!
+
       } catch (error) {
         console.error('검색 중 오류 발생:', error);
         setResults([]);
