@@ -65,7 +65,7 @@ function GenreHeatmap() {
   const [error, setError]     = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/insight/genre-trend`)
+    fetch(`${API_BASE}/insight/genre-trend`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setError('장르 트렌드 데이터를 불러오지 못했습니다.'))
@@ -144,7 +144,7 @@ function ReleaseDiscountScatter() {
   const [error, setError]     = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/insight/release-discount`)
+    fetch(`${API_BASE}/insight/release-discount`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setError('할인율 데이터를 불러오지 못했습니다.'))
@@ -221,7 +221,7 @@ function FakeDiscountRanking() {
   const [error, setError]     = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/insight/fake-discount-ranking`)
+    fetch(`${API_BASE}/insight/fake-discount-ranking`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setError('가짜 할인 데이터를 불러오지 못했습니다.'))
@@ -287,7 +287,7 @@ function CountryPriceRadar({ gameId }: { gameId: number }) {
 
   useEffect(() => {
     setLoading(true); setError('');
-    fetch(`${API_BASE}/api/insight/country-price/${gameId}`)
+    fetch(`${API_BASE}/insight/country-price/${gameId}`)
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError('가격 데이터를 불러오지 못했습니다.'))
@@ -379,7 +379,7 @@ function ReviewSentiment({ gameId }: { gameId: number }) {
 
   useEffect(() => {
     setLoading(true); setError('');
-    fetch(`${API_BASE}/api/insight/review-sentiment/${gameId}`)
+    fetch(`${API_BASE}/insight/review-sentiment/${gameId}`)
       .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then(setData)
       .catch(() => setError('리뷰 데이터가 없거나 불러오지 못했습니다.'))
@@ -471,7 +471,7 @@ export default function InsightPageClient() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/games?limit=200`)
+    fetch(`${API_BASE}/games?limit=200`)
       .then((r) => r.json())
       .then((data: GameItem[]) => {
         setGameList(data);
