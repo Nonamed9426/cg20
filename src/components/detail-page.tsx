@@ -1,6 +1,4 @@
-'use client';
-
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Game, getSteamHeader, getSteamStoreUrl, statPanels } from '@/lib/data';
