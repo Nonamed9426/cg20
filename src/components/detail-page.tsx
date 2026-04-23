@@ -244,6 +244,7 @@ function buildGameFromApi(data: Record<string, unknown>, appId: number): Game {
     reviewLabel:  '정보 없음',
     summary:      (data.game_description as string) ?? '',
     reason:       [],
+    headerImage:  (data.header_image_url as string) ?? null,
   } as unknown as Game;
 }
 
@@ -357,7 +358,12 @@ export function DetailPage({
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.78fr] lg:items-stretch">
             {/* 왼쪽 컬럼 */}
             <div className="flex flex-col gap-3">
-              <img src={getSteamHeader(appId)} alt={game.title} className="h-[260px] w-full rounded-[22px] object-cover shadow-neon" />
+              <img
+                src={(game as any).headerImage ?? (game as any).header_image_url ?? getSteamHeader(appId)}
+                alt={game.title}
+                className="h-[260px] w-full rounded-[22px] object-cover shadow-neon"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = getSteamHeader(appId); }}
+              />
               <div className="grid grid-cols-4 gap-2">
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded-xl border border-white/10 bg-[#2a124d]" />)}
               </div>
