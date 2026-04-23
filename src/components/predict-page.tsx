@@ -212,9 +212,9 @@ export function PredictPage({ game }: { game: Game }) {
   }, [prediction]);
 
   const countries = [
-    { label: '🇰🇷 한국', raw: `₩${krwPrice.toLocaleString()}`,  krwEquiv: krwPrice, color: '#c084fc' },
-    { label: '🇺🇸 미국', raw: `$${usdPrice.toFixed(2)}`,         krwEquiv: usdKrw,  color: '#60a5fa' },
-    { label: '🇯🇵 일본', raw: `¥${jpyPrice.toLocaleString()}`,   krwEquiv: jpyKrw,  color: '#f472b6' },
+    { label: '🇰🇷 한국', raw: `₩${krwPrice.toLocaleString()}`,  krwEquiv: krwPrice },
+    { label: '🇺🇸 미국', raw: `$${usdPrice.toFixed(2)}`,         krwEquiv: usdKrw  },
+    { label: '🇯🇵 일본', raw: `¥${jpyPrice.toLocaleString()}`,   krwEquiv: jpyKrw  },
   ];
   const maxKrw = Math.max(krwPrice, usdKrw, jpyKrw, 1);
   const minKrw = Math.min(krwPrice, usdKrw, jpyKrw);
@@ -285,12 +285,14 @@ export function PredictPage({ game }: { game: Game }) {
                     <span className="text-white/60">{c.label}</span>
                     <div className="flex items-center gap-1">
                       <span className="text-white/35">{c.raw}</span>
-                      <span className="font-semibold" style={{ color: c.color }}>{formatKRW(c.krwEquiv)}</span>
+                      <span className={`font-semibold ${c.krwEquiv === minKrw && krwPrice > 0 ? 'text-emerald-400' : 'text-white/80'}`}>
+                        {formatKRW(c.krwEquiv)}
+                      </span>
                       {c.krwEquiv === minKrw && krwPrice > 0 && <span className="text-emerald-400">🏆</span>}
                     </div>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
-                    <div className="h-full rounded-full" style={{ width: `${(c.krwEquiv / maxKrw) * 100}%`, background: c.color, opacity: 0.75 }} />
+                    <div className="h-full rounded-full" style={{ width: `${(c.krwEquiv / maxKrw) * 100}%`, background: c.krwEquiv === minKrw && krwPrice > 0 ? '#4ade80' : 'rgba(255,255,255,0.3)' }} />
                   </div>
                 </div>
               ))}

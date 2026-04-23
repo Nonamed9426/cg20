@@ -8,7 +8,7 @@ import { API_BASE } from '@/lib/api';
 // ═══════════════════════════════════════════════════════════════════
 type GenreTrend    = { years: number[]; genres: string[]; matrix: number[][] };
 type YearDiscount  = { year: number; avgDiscount: number; gameCount: number };
-type FakeGame      = { gameId: number; name: string; score: number; grade: string; reason: string };
+type FakeGame      = { gameId: number; name: string; score: number; grade: string; reason: string; maxRegPrice: number; minRegPrice: number; priceHikePct: number; changeCnt: number; maxDiscount: number };
 type CountryPrice  = { gameId: number; name: string; prices: { KRW?: number; USD?: number; JPY?: number } };
 type ReviewStat    = { positive: number; negative: number; totalReviews: number; keywords: { text: string; weight: number; isPos: boolean }[] };
 type GameItem      = { gameId: number; name: string; genres: string[] };
@@ -144,7 +144,7 @@ function ReleaseDiscountScatter() {
   const [error, setError]     = useState('');
 
   useEffect(() => {
-    fetch(`${API_BASE}/insight/release-discount`)
+    fetch(`${API_BASE}/insights/discount-frequency`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setError('할인율 데이터를 불러오지 못했습니다.'))
@@ -216,9 +216,10 @@ function ReleaseDiscountScatter() {
 //  인사이트 ③ — 가짜 할인 의심 게임 순위
 // ═══════════════════════════════════════════════════════════════════
 function FakeDiscountRanking() {
-  const [data, setData]       = useState<FakeGame[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState('');
+  const [data, setData]           = useState<FakeGame[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
+  const [expanded, setExpanded]   = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/insight/fake-discount-ranking`)
@@ -234,11 +235,15 @@ function FakeDiscountRanking() {
   const gradeEmoji: Record<string, string> = {
     '매우의심': '🔴', '약간의심': '🟠', '주의': '🟡', '정상': '🟢',
   };
+  const gradeBg: Record<string, string> = {
+    '매우의심': 'rgba(239,68,68,0.06)', '약간의심': 'rgba(249,115,22,0.06)',
+    '주의': 'rgba(234,179,8,0.06)', '정상': 'rgba(34,197,94,0.06)',
+  };
 
   return (
     <div className="panel-soft p-5">
       <div className="mb-1 text-sm font-semibold text-white">③ 가짜 할인 의심 게임 순위</div>
-      <div className="mb-3 text-xs text-white/40">의심 점수 0~100점 (정가 인상·상시 할인·요요 패턴 등 종합) — 막대 그래프</div>
+      <div className="mb-3 text-xs text-white/40">의심 점수 0~100점 (정가 인상·상시 할인·요요 패턴 등 종합) — 클릭하면 상세 근거 확인</div>
       {loading && <LoadingBox />}
       {error && <ErrorBox msg={error} />}
       {!loading && !error && (
@@ -251,23 +256,86 @@ function FakeDiscountRanking() {
               </span>
             ))}
           </div>
+
           <div className="space-y-2">
-            {data.map((g) => (
-              <div key={g.gameId}>
-                <div className="mb-0.5 flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1 text-white/80">
-                    {gradeEmoji[g.grade] ?? '⚪'} <span className="max-w-[160px] truncate">{g.name}</span>
-                  </span>
-                  <span className="font-bold" style={{ color: gradeColor[g.grade] ?? '#fff' }}>{g.score}점</span>
+            {data.map((g) => {
+              const isOpen = expanded === g.gameId;
+              const color  = gradeColor[g.grade] ?? '#fff';
+              return (
+                <div key={g.gameId}
+                  className="rounded-xl border border-white/5 overflow-hidden transition-all cursor-pointer"
+                  style={{ background: isOpen ? gradeBg[g.grade] : 'transparent', borderColor: isOpen ? `${color}30` : 'rgba(255,255,255,0.05)' }}
+                  onClick={() => setExpanded(isOpen ? null : g.gameId)}
+                >
+                  {/* 헤더 행 */}
+                  <div className="px-3 pt-3 pb-2">
+                    <div className="mb-1.5 flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 text-white/85 font-medium">
+                        {gradeEmoji[g.grade] ?? '⚪'}
+                        <span className="max-w-[200px] truncate">{g.name}</span>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold tabular-nums" style={{ color }}>{g.score}점</span>
+                        <span className="text-white/30 text-[10px]">{isOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-white/8">
+                      <div className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${g.score}%`, background: color, opacity: 0.8 }} />
+                    </div>
+                    {/* 요약 한 줄 (닫혔을 때) */}
+                    {!isOpen && (
+                      <div className="mt-1 text-[9px] text-white/30">{g.reason}</div>
+                    )}
+                  </div>
+
+                  {/* 상세 근거 패널 (열렸을 때) */}
+                  {isOpen && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-white/5 pt-2">
+                      {/* 정가 변동 */}
+                      <div className="rounded-lg bg-white/5 px-3 py-2">
+                        <div className="text-[10px] text-white/40 mb-1">📊 정가 변동 이력</div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-white/60">최저 정가</span>
+                          <span className="font-bold text-white">₩{g.minRegPrice.toLocaleString()}</span>
+                          <span className="text-white/30">→</span>
+                          <span className="font-bold" style={{ color }}>₩{g.maxRegPrice.toLocaleString()}</span>
+                          <span className="text-white/60">최고 정가</span>
+                          <span className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold"
+                            style={{ background: `${color}20`, color }}>
+                            +{g.priceHikePct}% 인상
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 통계 배지 */}
+                      <div className="flex flex-wrap gap-2">
+                        <div className="rounded-lg bg-white/5 px-3 py-1.5 text-center">
+                          <div className="text-[10px] text-white/40">가격 변동 횟수</div>
+                          <div className="text-sm font-bold" style={{ color }}>{g.changeCnt.toLocaleString()}회</div>
+                        </div>
+                        <div className="rounded-lg bg-white/5 px-3 py-1.5 text-center">
+                          <div className="text-[10px] text-white/40">최대 할인율</div>
+                          <div className="text-sm font-bold text-[#c084fc]">{g.maxDiscount}%</div>
+                        </div>
+                        <div className="rounded-lg bg-white/5 px-3 py-1.5 text-center">
+                          <div className="text-[10px] text-white/40">의심 등급</div>
+                          <div className="text-sm font-bold" style={{ color }}>{g.grade}</div>
+                        </div>
+                      </div>
+
+                      {/* 종합 판단 */}
+                      <div className="rounded-lg px-3 py-2 text-xs"
+                        style={{ background: `${color}10`, border: `1px solid ${color}25`, color }}>
+                        💡 {g.reason}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-white/8">
-                  <div className="h-full rounded-full"
-                    style={{ width: `${g.score}%`, background: gradeColor[g.grade] ?? '#fff', opacity: 0.8 }} />
-                </div>
-                <div className="mt-0.5 text-[9px] text-white/30">{g.reason}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
           <div className="mt-3 rounded-xl border border-red-400/20 bg-red-400/8 p-3 text-xs text-red-300">
             💡 60점 이상은 구매 전 가격 히스토리를 반드시 확인하세요.
           </div>

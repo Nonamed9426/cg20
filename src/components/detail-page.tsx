@@ -221,36 +221,111 @@ function TabPrediction({ gameId }: { gameId: number }) {
   );
 }
 
+// ── API에서 Game 객체 만들기 ──────────────────────────────
+function buildGameFromApi(data: Record<string, unknown>, appId: number): Game {
+  return {
+    steamAppId:   appId,
+    title:        (data.game_name as string) ?? `Game #${appId}`,
+    genre:        [],
+    tags:         [],
+    score:        0,
+    discountRate: 0,
+    originalKRW:  0,
+    priceKRW:     0,
+    prices:       { kr: '-', us: '-', jp: '-' },
+    platforms:    [
+      ...(data.os_windows ? ['Windows'] : []),
+      ...(data.os_mac     ? ['Mac']     : []),
+      ...(data.os_linux   ? ['Linux']   : []),
+    ],
+    playtime:     '정보 없음',
+    streamStatus: '-',
+    reviewLabel:  '정보 없음',
+    summary:      (data.game_description as string) ?? '',
+    reason:       [],
+  } as unknown as Game;
+}
+
 // ── 메인 DetailPage ───────────────────────────────────────
-export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
-  const [activeTab, setActiveTab] = useState<'intro' | 'review' | 'timing'>('intro');
+export function DetailPage({
+  game: propGame,
+  related,
+  steamAppId: propAppId,
+}: {
+  game?: Game;
+  related: Game[];
+  steamAppId?: number;
+}) {
+  const [activeTab, setActiveTab]     = useState<'intro' | 'review' | 'timing'>('intro');
   const [expandedStat, setExpandedStat] = useState<string | null>(null);
   const rates = useExchange();
+
+  // ── API에서 게임 기본정보 로드 (더미에 없는 game_id용) ──
+  const [apiGame, setApiGame]         = useState<Game | null>(null);
+  const [gameLoading, setGameLoading] = useState(!propGame && !!propAppId);
+
+  useEffect(() => {
+    if (propGame || !propAppId) return;
+    setGameLoading(true);
+    fetch(`${API_BASE}/steam-game/${propAppId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((json) => {
+        if (json?.data) setApiGame(buildGameFromApi(json.data, propAppId));
+      })
+      .catch(() => {})
+      .finally(() => setGameLoading(false));
+  }, [propAppId, propGame]);
+
+  // 실제 사용할 game 객체
+  const game = propGame ?? apiGame;
+  const appId = game?.steamAppId ?? propAppId!;
 
   // ── 실시간 가격 API ───────────────────────────────────────
   const [prices, setPrices] = useState<PriceData | null>(null);
   useEffect(() => {
-    fetch(`${API_BASE}/steam-game/${game.steamAppId}/price`)
+    if (!appId) return;
+    fetch(`${API_BASE}/steam-game/${appId}/price`)
       .then((r) => r.ok ? r.json() : null)
       .then((json) => json?.prices ? setPrices(json.prices) : null)
       .catch(() => {});
-  }, [game.steamAppId]);
+  }, [appId]);
 
   // ── 뉴스 API ──────────────────────────────────────────────
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [news, setNews]               = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   useEffect(() => {
-    fetch(`${API_BASE}/steam-game/${game.steamAppId}/news`)
+    if (!appId) return;
+    fetch(`${API_BASE}/steam-game/${appId}/news`)
       .then((r) => r.ok ? r.json() : null)
       .then((json) => { if (json?.data) setNews(json.data.slice(0, 2)); })
       .catch(() => {})
       .finally(() => setNewsLoading(false));
-  }, [game.steamAppId]);
+  }, [appId]);
+
+  // ── 로딩 중 ──────────────────────────────────────────────
+  if (gameLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#c084fc] border-t-transparent" />
+      </div>
+    );
+  }
+
+  // ── 게임 없음 fallback ────────────────────────────────────
+  if (!game) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-2 text-white/40">
+        <span className="text-3xl">🎮</span>
+        <span className="text-sm">게임 정보를 불러올 수 없습니다.</span>
+        <Link href="/rankings" className="mt-2 text-xs text-[#c084fc] underline">랭킹으로 돌아가기</Link>
+      </div>
+    );
+  }
 
   // 가격 — API 우선, 없으면 더미
-  const krwPrice = prices?.KRW ?? game.priceKRW;
-  const usdPrice = prices?.USD ?? parseFloat(game.prices.us.replace('$', '').replace('Free', '0'));
-  const jpyPrice = prices?.JPY ?? parseFloat(game.prices.jp.replace('¥', '').replace(',', '').replace('무료', '0'));
+  const krwPrice = prices?.KRW ?? game.priceKRW ?? 0;
+  const usdPrice = prices?.USD ?? parseFloat((game.prices?.us ?? '0').replace('$', '').replace('Free', '0'));
+  const jpyPrice = prices?.JPY ?? parseFloat((game.prices?.jp ?? '0').replace('¥', '').replace(',', '').replace('무료', '0'));
 
   // 환율 환산
   const usdKrw = Math.round(usdPrice * rates.usd);
@@ -276,17 +351,17 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
         <section className="panel overflow-hidden p-5 md:p-6">
           <div className="mb-3 flex items-center justify-between text-xs text-white/50">
             <span>상세 분석 · Steam game detail</span>
-            <span>{game.genre.join(' · ')}</span>
+            <span>{(game.genre ?? []).join(' · ')}</span>
           </div>
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.78fr] lg:items-stretch">
             {/* 왼쪽 컬럼 */}
             <div className="flex flex-col gap-3">
-              <img src={getSteamHeader(game.steamAppId)} alt={game.title} className="h-[260px] w-full rounded-[22px] object-cover shadow-neon" />
+              <img src={getSteamHeader(appId)} alt={game.title} className="h-[260px] w-full rounded-[22px] object-cover shadow-neon" />
               <div className="grid grid-cols-4 gap-2">
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 rounded-xl border border-white/10 bg-[#2a124d]" />)}
               </div>
 
-              {/* ── 탭 — flex-1로 환율 박스와 높이 맞춤 ── */}
+              {/* ── 탭 ── */}
               <div className="panel-soft flex flex-1 flex-col p-4" style={{ minHeight: 0 }}>
                 <div className="mb-3 flex items-center gap-3 border-b border-white/8 pb-3">
                   {tabs.map((tab) => (
@@ -302,46 +377,48 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
                 <div className="flex-1 overflow-y-auto">
                   {activeTab === 'intro' && (
                     <>
-                      <p className="text-sm leading-6 text-white/72">{game.summary}</p>
+                      <p className="text-sm leading-6 text-white/72">{game.summary ?? game.description ?? '게임 소개 정보가 없습니다.'}</p>
                       <div className="mt-4 flex flex-wrap gap-2">
-                        {game.tags.map((tag) => <span key={tag} className="pill">#{tag}</span>)}
+                        {(game.tags ?? []).map((tag) => <span key={tag} className="pill">#{tag}</span>)}
                       </div>
                     </>
                   )}
-                  {activeTab === 'review' && <TabReview gameId={game.steamAppId} />}
-                  {activeTab === 'timing' && <TabPrediction gameId={game.steamAppId} />}
+                  {activeTab === 'review' && <TabReview gameId={appId} />}
+                  {activeTab === 'timing' && <TabPrediction gameId={appId} />}
                 </div>
               </div>
             </div>
 
-            {/* 오른쪽 컬럼 — 할인박스(고정) + 환율(고정) + 이유(flex-1 늘어남) */}
+            {/* 오른쪽 컬럼 */}
             <div className="flex flex-col gap-4">
-              {/* ── 맨 위 박스: 할인/가격/버튼 (고정 높이) ── */}
+              {/* 할인/가격/버튼 */}
               <div className="rounded-[24px] border border-line/60 bg-[#241047] p-5 shadow-glow">
                 <div className="text-emerald-400 text-3xl font-bold">
-                  {game.discountRate > 0 ? `-${game.discountRate}%` : '정가'}
+                  {(game.discountRate ?? 0) > 0 ? `-${game.discountRate}%` : '정가'}
                 </div>
                 <div className="mt-1 text-2xl font-bold text-mint">
                   {formatPrice('KRW', krwPrice)}
                 </div>
-                {game.discountRate > 0 && (
+                {(game.discountRate ?? 0) > 0 && game.originalKRW > 0 && (
                   <div className="mt-1 text-sm text-white/35 line-through">
                     ₩{game.originalKRW.toLocaleString()}
                   </div>
                 )}
-                <div className="mt-2 text-sm text-white/70">{game.reviewLabel} · {game.score}점</div>
+                <div className="mt-2 text-sm text-white/70">
+                  {game.reviewLabel ?? '정보 없음'} · {game.score ?? 0}점
+                </div>
                 <div className="mt-4 flex gap-2">
-                  <a href={getSteamStoreUrl(game.steamAppId)} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">지금 구매</a>
-                  <Link href={`/predict/${game.steamAppId}`} target="_blank" rel="noreferrer" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
+                  <a href={getSteamStoreUrl(appId)} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-[#55d58a] px-4 py-3 text-center text-sm font-semibold text-black">지금 구매</a>
+                  <Link href={`/predict/${appId}`} target="_blank" rel="noreferrer" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">할인 예측</Link>
                 </div>
                 <div className="mt-4 space-y-2 text-xs text-white/55">
-                  <div>플랫폼: {game.platforms.join(', ')}</div>
-                  <div>평균 플레이타임: {game.playtime}</div>
-                  <div>스트리밍 지표: {game.streamStatus}</div>
+                  <div>플랫폼: {(game.platforms ?? []).join(', ') || '정보 없음'}</div>
+                  <div>평균 플레이타임: {game.playtime ?? '정보 없음'}</div>
+                  <div>스트리밍 지표: {game.streamStatus ?? '-'}</div>
                 </div>
               </div>
 
-              {/* ── 중간 박스: 환율 ── */}
+              {/* 환율 */}
               <div className="panel-soft p-4">
                 <div className="mb-1 text-sm font-semibold">환율</div>
                 {rates.loading
@@ -364,28 +441,31 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
                 </div>
               </div>
 
-              {/* ── 하단 박스: 게임 사도 되는 이유? — flex-1로 바닥까지 꽉 채움 ── */}
+              {/* 게임 사도 되는 이유 */}
               <div className="panel-soft flex flex-1 flex-col p-4">
                 <div className="mb-4 text-sm font-semibold">게임 사도 되는 이유?</div>
-                <div className="flex flex-1 flex-col justify-around">
-                  {game.reason.map((item, idx) => (
-                    <div key={item}>
-                      <div className="mb-1 flex items-center justify-between text-xs text-white/60">
-                        <span>{item}</span><span>{90 - idx * 10}%</span>
+                {(game.reason ?? []).length > 0 ? (
+                  <div className="flex flex-1 flex-col justify-around">
+                    {(game.reason ?? []).map((item, idx) => (
+                      <div key={item}>
+                        <div className="mb-1 flex items-center justify-between text-xs text-white/60">
+                          <span>{item}</span><span>{90 - idx * 10}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/10">
+                          <div className="h-2 rounded-full bg-gradient-to-r from-[#64ffc8] to-[#ff70ea]" style={{ width: `${90 - idx * 10}%` }} />
+                        </div>
                       </div>
-                      <div className="h-2 rounded-full bg-white/10">
-                        <div className="h-2 rounded-full bg-gradient-to-r from-[#64ffc8] to-[#ff70ea]" style={{ width: `${90 - idx * 10}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/30">추후 업데이트 예정</div>
+                )}
               </div>
             </div>
           </div>
         </section>
 
         <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
-          {/* 추천 이유 요약 — 태그 버튼 제거 */}
           <div className="panel p-5 md:p-6">
             <div className="mb-4 section-title">추천 이유 요약</div>
             <div className="rounded-2xl border border-emerald-400/20 bg-[#2f4879] p-4 text-sm text-white/80">
@@ -420,12 +500,12 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
           </div>
         </section>
 
-        {/* ── 게임 소식 ── */}
+        {/* 게임 소식 */}
         <section className="panel p-5 md:p-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="section-title">게임 소식</div>
             <a
-              href={`https://store.steampowered.com/news/app/${game.steamAppId}`}
+              href={`https://store.steampowered.com/news/app/${appId}`}
               target="_blank" rel="noreferrer"
               className="text-xs text-white/45 hover:text-white/70 transition"
             >
@@ -464,11 +544,11 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
           )}
         </section>
 
-        {/* ── 바로가기 — 게임 소식 아래로 이동 ── */}
+        {/* 바로가기 */}
         <section className="panel p-5">
           <div className="mb-4 section-title">바로가기</div>
           <div className="space-y-3 text-sm text-white/70">
-            <Link href={`/predict/${game.steamAppId}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3 hover:border-[#c084fc]/50 transition">할인예측 페이지 <ExternalLink className="h-4 w-4" /></Link>
+            <Link href={`/predict/${appId}`} className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3 hover:border-[#c084fc]/50 transition">할인예측 페이지 <ExternalLink className="h-4 w-4" /></Link>
             <Link href="/rankings" className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3 hover:border-[#c084fc]/50 transition">게임 순위 페이지 <ExternalLink className="h-4 w-4" /></Link>
             <Link href="/recommend" className="flex items-center justify-between rounded-xl border border-white/10 bg-[#1d0d39] px-4 py-3 hover:border-[#c084fc]/50 transition">추천 결과 페이지 <ExternalLink className="h-4 w-4" /></Link>
           </div>
@@ -486,7 +566,7 @@ export function DetailPage({ game, related }: { game: Game; related: Game[] }) {
           </div>
         </section>
 
-        {/* ── 통계 요약 ── */}
+        {/* 통계 요약 */}
         <section className="panel p-5">
           <div className="mb-4 section-title">통계 요약</div>
           <div className="space-y-4">

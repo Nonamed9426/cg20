@@ -33,7 +33,7 @@ export function ExchangeProvider({ children }: { children: ReactNode }) {
       if (json.status === 'success') {
         setRates({
           usd: json.data.usd,
-          jpy: json.data.jpy,
+          jpy: json.data.jpy / 100, // API는 100 JPY → KRW 환율을 줌
           updatedAt: json.updated_at,
           loading: false,
           error: false,
