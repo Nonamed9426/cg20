@@ -1,6 +1,6 @@
 'use client';
 
-import Link from '@/compat/next-link';
+import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Game, getSteamHeader, getSteamStoreUrl, statPanels } from '@/lib/data';
@@ -59,7 +59,8 @@ type PredictionData = {
 };
 
 // ── 유틸 ──────────────────────────────────────────────────
-function stripHtml(str: string) {
+function stripHtml(str?: string) {
+  if (!str) return ''; // 값이 없으면 빈 문자열을 반환하고 종료
   return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
