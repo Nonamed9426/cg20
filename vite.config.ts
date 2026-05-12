@@ -7,6 +7,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+    allowedHosts: ['crazygames20.sungae.org', '.sungae.org'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
