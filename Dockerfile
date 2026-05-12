@@ -18,6 +18,7 @@ WORKDIR /cg20
 COPY --from=builder /cg20/dist ./dist
 COPY --from=builder /cg20/node_modules ./node_modules
 COPY --from=builder /cg20/package.json ./package.json
+COPY --from=builder /cg20/vite.config.ts ./vite.config.ts
 
 EXPOSE 3000
 CMD ["npm", "run", "preview"]
