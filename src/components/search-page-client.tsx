@@ -39,19 +39,18 @@ export function SearchPageClient() {
         
         // 💡 핵심: 백엔드 데이터를 프론트엔드 Game 타입에 맞춰서 변환(Mapping)
         const mappedResults = (json.data ?? []).map((item: any) => ({
-          steamAppId: item.gameId,     // API의 gameId를 steamAppId로 연결
-          title: item.name,            // API의 name을 title로 연결
-          slug: String(item.gameId),
-          genre: item.genres ?? [],    // API의 genres를 genre로 연결
-          tags: [],                    // 검색 API엔 태그가 없으므로 빈 배열
+          steamAppId: item.game_id ?? item.gameId,
+          title: item.game_name ?? item.name,
+          slug: String(item.game_id ?? item.gameId),
+          genre: item.genres ?? [],
+          tags: [],
           score: 0,
           discountRate: 0,
-          priceKRW: item.price,
-          // GameCard가 에러를 뿜지 않도록 prices 객체를 강제로 만들어줌
-          prices: { 
-            kr: item.isFree ? '무료' : `₩${item.price.toLocaleString()}`, 
-            us: '-', 
-            jp: '-' 
+          priceKRW: item.price_krw ?? item.price ?? 0,
+          prices: {
+            kr: (item.is_free ?? item.isFree) ? '무료' : `₩${(item.price_krw ?? item.price ?? 0).toLocaleString()}`,
+            us: '-',
+            jp: '-'
           },
           description: '',
           platform: [],

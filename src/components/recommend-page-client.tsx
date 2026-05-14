@@ -74,8 +74,15 @@ export function RecommendPageClient() {
       const json = await res.json();
 
       if (json.status === 'success') {
-        // 예산 필터는 프론트에서 처리 (API에 price 필터 없음)
-        setResults(json.data ?? []);
+        const mapped = (json.data ?? []).map((item: any) => ({
+          gameId:      item.game_id          ?? item.gameId,
+          name:        item.game_name        ?? item.name,
+          headerImage: item.header_image_url ?? item.headerImage ?? null,
+          isFree:      item.is_free          ?? item.isFree      ?? false,
+          price:       item.price_krw        ?? item.price       ?? 0,
+          genres:      item.genres           ?? [],
+        }));
+        setResults(mapped);
       }
     } catch {
       setResults([]);
